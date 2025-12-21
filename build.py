@@ -87,6 +87,30 @@ def copy_config_to_dist():
     if not copied:
         print("Warning: No config file found to copy.")
 
+def create_zip(debug_mode):
+    """Packages the dist folder into a zip file."""
+    source_dir = os.path.join(OUTPUT_DIR, EXECUTABLE_NAME)
+    
+    zip_name = EXECUTABLE_NAME
+    if debug_mode:
+        zip_name += "-debug"
+    
+    # shutil.make_archive expects the base_name without extension
+    # It creates base_name.zip
+    
+    print(f"\nPackaging into {zip_name}.zip...")
+    
+    # format='zip': create a zip file
+    # root_dir=OUTPUT_DIR: the root directory to archive
+    # base_dir=EXECUTABLE_NAME: the directory inside root_dir to start archiving from
+    # This prevents the zip from containing 'dist/...' structure, but rather just the executable folder
+    
+    # We want the zip to contain the top-level folder 'RainingKeysPython'
+    # So we archive 'dist' but only the 'RainingKeysPython' subdirectory
+    
+    shutil.make_archive(zip_name, 'zip', root_dir=OUTPUT_DIR, base_dir=EXECUTABLE_NAME)
+    print(f"Zip created: {zip_name}.zip")
+
 def main():
     # 1. Clean previous builds
     clean_directories()
@@ -107,8 +131,12 @@ def main():
     # 4. Copy config
     copy_config_to_dist()
 
-    print("\nBuild complete!")
-    print(f"Output: {os.path.join(OUTPUT_DIR, EXECUTABLE_NAME)}")
+    # 5. Zip
+    create_zip(debug_mode)
+
+    print("\nBuild and packaging complete!")
+    print(f"Output folder: {os.path.join(OUTPUT_DIR, EXECUTABLE_NAME)}")
+    print(f"Zip file: {EXECUTABLE_NAME + ('-debug' if debug_mode else '')}.zip")
 
 if __name__ == "__main__":
     main()

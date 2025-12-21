@@ -64,13 +64,16 @@ RainingKeysPython/
 
 ## Usage
 
-1.  Run the application:
+1.  Run the build script:
     ```bash
-    python main.py
+    python build.py
     ```
-2.  **Two windows will appear**:
-    - The transparent **Overlay** (shows the bars).
-    - The **RainingKeys Config** window (controls settings).
+2.  The script will generate:
+    -   Folder: `dist/RainingKeysPython/`
+    -   Zip: `RainingKeysPython.zip` (or `RainingKeysPython-debug.zip` if in debug mode)
+
+### Debug vs Release Build
+You can toggle the console window visibility via `config.ini`:** window (controls settings).
 3.  Use the Config window to move the overlay or change speed/direction live.
 4.  Press the configured keys (Default: `a`, `s`, `l`, `;`) to see the visualization.
 5.  **To Exit**: Close the Config window or press `Ctrl+C` in the terminal.

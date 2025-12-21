@@ -10,3 +10,4 @@ config.ini
 build/
 dist/
 *.spec
+*.zip
