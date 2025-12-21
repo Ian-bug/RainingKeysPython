@@ -94,12 +94,13 @@ You can edit this file manually or use the **GUI Settings Window**.
 
 *Note: Key mappings and colors are currently defined in `core/config.py`.*
 
-## Roadmap
+## Todo
 
 - [x] Interactive Configuration UI (GUI for settings)
 - [x] Save/Load config from ini
 - [ ] Multi-monitor support
-- [ ] Custom skins/textures for bars
+- [ ] Custom color
+- [ ] Custom key mapping 
 
 ## Disclaimer
 
