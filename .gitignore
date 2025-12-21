@@ -1,10 +1,6 @@
 __pycache__/
 *.pyc
-implementation_plan.md
-task.md
-walkthrough.md
 config.ini
-
 
 # Build artifacts
 build/
