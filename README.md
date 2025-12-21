@@ -19,6 +19,9 @@ RainingKeys is a purely external overlay application that visualizes keyboard in
 ## Features
 
 - **External Overlay**: Runs as a transparent, always-on-top, click-through window over any game.
+- **Graphic Interface**: Live configuration window to adjust settings on the fly.
+- **Positioning**: Configurable X/Y overlay position.
+- **Fall Direction**: Supports both Down (Classic) and Up (Reverse) fall directions.
 - **Accurate Timing**: Uses high-resolution monotonic clocks (`time.perf_counter`) for smooth, jitter-free falling animation.
 - **Lane System**: Configurable key-to-lane mapping (e.g., WASD, Space, Enter).
 - **Long Press Support**: Visualizes held keys with variable-length bars.
@@ -64,23 +67,30 @@ RainingKeysPython/
     ```bash
     python main.py
     ```
-2.  The overlay will appear (default: full screen transparent window).
-3.  Press the configured keys (Default: `a`, `s`, `l`, `;`) to see the visualization.
-4.  The Debug Overlay in the top-left corner shows FPS and object pool stats.
-5.  **To Exit**: Press `Ctrl+C` in the terminal window.
+2.  **Two windows will appear**:
+    - The transparent **Overlay** (shows the bars).
+    - The **RainingKeys Config** window (controls settings).
+3.  Use the Config window to move the overlay or change speed/direction live.
+4.  Press the configured keys (Default: `a`, `s`, `l`, `;`) to see the visualization.
+5.  **To Exit**: Close the Config window or press `Ctrl+C` in the terminal.
 
 ## Configuration
 
-Edit `core/config.py` to customize the overlay:
+## Configuration
 
-| Parameter | Description |
-| :--- | :--- |
-| `SCROLL_SPEED` | Falling speed in pixels per second. |
-| `LANE_MAP` | Dictionary mapping specific keys (e.g., `'a'`, `'Key.space'`) to lane indices. |
-| `BAR_WIDTH` | Visual width of the falling notes. |
-| `INPUT_LATENCY_OFFSET` | Seconds to offset rendering (useful for audio sync). |
-| `MAX_BARS` | Soft limit for the object pool (prevents memory leaks). |
-| `COLORS` | RGBA values for bars and text. |
+Settings are stored in `config.ini` (automatically created on first run).
+You can edit this file manually or use the **GUI Settings Window**.
+
+### Config Options
+
+| Section | Parameter | Description |
+| :--- | :--- | :--- |
+| `Visual` | `scroll_speed` | Falling speed in pixels per second. |
+| `Visual` | `fall_direction` | `down` or `up`. |
+| `Position` | `x` | Overlay X position (pixels). |
+| `Position` | `y` | Overlay Y position (pixels). |
+
+*Note: Key mappings and colors are currently defined in `core/config.py`.*
 
 ## Roadmap
 

@@ -47,23 +47,11 @@ class BarPool:
         if self.inactive_bars:
             bar = self.inactive_bars.pop()
         else:
-            # Pool exhausted.
-            # Strategy: If below max_size, create new.
-            # If at max_size, recycle the oldest active bar (soft limit).
-            total_count = len(self.active_bars) + len(self.inactive_bars) # logic check
-            # Actually total known count is just what we have tracked.
-            # Let's track total instantiated count if strictly needed, 
-            # but deque length is good enough.
-            
-            # Simple count check:
             if (len(self.active_bars) + len(self.inactive_bars)) < self.max_size:
                 bar = Bar()
             elif self.active_bars:
-                # Soft Limit hit: Recycle oldest
-                bar = self.active_bars.popleft() # Oldest is usually at the left/start
-                # Technically we are taking it out of active to re-add it as new active
+                bar = self.active_bars.popleft()
             else:
-                # Should effectively never happen unless max_size=0
                 bar = Bar() 
         
         bar.active = True
@@ -79,16 +67,21 @@ class BarPool:
         self.inactive_bars.append(bar)
 
 class RainingKeysOverlay(QWidget):
-    def __init__(self):
+    def __init__(self, settings_manager):
         super().__init__()
-        self.init_ui()
+        self.settings = settings_manager
+        # Connect to settings changed signal
+        self.settings.settings_changed.connect(self.on_settings_changed)
+        
         self.pool = BarPool(Config.MAX_BARS)
         self.active_holds = {} # {lane_index: Bar} tracking currently held notes
+        
+        self.init_ui()
         
         # High-res timer for rendering
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_canvas)
-        self.timer.start(16) # ~60 FPS target trigger, but delta used for physics
+        self.timer.start(16) # ~60 FPS target trigger
 
         # Debug stats
         self.last_fps_time = time.perf_counter()
@@ -100,26 +93,42 @@ class RainingKeysOverlay(QWidget):
         self.setWindowFlags(
             Qt.FramelessWindowHint | 
             Qt.WindowStaysOnTopHint | 
-            Qt.Tool | # Tool prevents showing in alt-tab usually
-            Qt.WindowTransparentForInput # Qt 5.10+ helper, acts as partial clickthrough
+            Qt.Tool | 
+            Qt.WindowTransparentForInput
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-        # Full screen
-        screen_geo = QApplication.primaryScreen().geometry()
-        self.setGeometry(screen_geo)
+        # Initial calculation for window size
+        # We need enough width for all lanes
+        max_lane = 0
+        if Config.LANE_MAP:
+             max_lane = max(Config.LANE_MAP.values())
+        
+        # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
+        width = Config.LANE_START_X + ((max_lane + 1) * Config.LANE_WIDTH) + 50
+        height = QApplication.primaryScreen().size().height()
+        
+        self.resize(width, height)
+        # Move to configured position
+        self.move(self.settings.overlay_x, self.settings.overlay_y)
 
-        # Win32 Click-through + Always on Top enforcement
+        # Win32 Click-through
         if HAS_WIN32:
             hwnd = int(self.winId())
-            styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT)
+            try:
+                styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+                win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT)
+            except Exception as e:
+                print(f"Win32 Error: {e}")
+
+    def on_settings_changed(self):
+        # Move window live when settings change
+        self.move(self.settings.overlay_x, self.settings.overlay_y)
 
     def handle_input(self, lane_index, timestamp):
         """Slot called when input monitor detects a key press."""
         if lane_index in self.active_holds:
-            # Key already held? (Should be filtered by input_mon, but safety check)
             pass
         else:
             bar = self.pool.spawn(lane_index, timestamp)
@@ -138,66 +147,88 @@ class RainingKeysOverlay(QWidget):
         painter = QPainter()
         try:
             if not painter.begin(self):
-                # Failed to start painting (device occupied?)
                 return
             
             painter.setRenderHint(QPainter.Antialiasing)
 
             current_time = time.perf_counter()
-            
-            # Calculate Logic
             screen_h = self.height()
             to_recycle = []
             
+            # Get current settings
+            speed = self.settings.scroll_speed
+            falling_down = (self.settings.fall_direction == 'down')
+
             # Bar Drawing Loop
             for bar in self.pool.active_bars:
-                # Calculate Y positions
-                # Bottom of the note (Leading Edge)
+                # 1. Physics: Distance from Origin (Press Time)
                 delta_press = current_time - bar.press_time + Config.INPUT_LATENCY_OFFSET
-                y_bottom = delta_press * Config.SCROLL_SPEED
+                dist_head = delta_press * speed
                 
-                # Top of the note (Trailing Edge)
                 if bar.release_time is None:
-                    # Still held: Top is at current time (0 offset from 'now')
-                    delta_release = Config.INPUT_LATENCY_OFFSET # effectively 0 time passed since 'now'
-                    y_top = delta_release * Config.SCROLL_SPEED
+                    # Held
+                    dist_tail = Config.INPUT_LATENCY_OFFSET * speed
                 else:
+                    # Released
                     delta_release = current_time - bar.release_time + Config.INPUT_LATENCY_OFFSET
-                    y_top = delta_release * Config.SCROLL_SPEED
+                    dist_tail = delta_release * speed
 
-                # Check bounds (Recycle if Top is off-screen)
-                if y_top > screen_h:
-                    to_recycle.append(bar)
-                    continue
+                # 2. Geometry
+                height_bar = dist_head - dist_tail
+                # Clamp min height so short taps are visible
+                if height_bar < Config.BAR_HEIGHT:
+                     height_bar = Config.BAR_HEIGHT
+                     dist_tail = dist_head - height_bar
                 
-                # Render only if VISIBLE
-                if y_bottom < 0:
-                     continue
-
-                # Fade Logic (based on leading edge / y_bottom)
+                # Calculate Screen Y
+                if falling_down:
+                    # Spawn at 0 (Top)
+                    # Tail is "above" Head (smaller Y value)
+                    rect_y = dist_tail
+                else:
+                    # Spawn at ScreenHeight (Bottom)
+                    # Head moves UP (smaller Y value)
+                    # Tail moves UP (larger Y value than Head)
+                    # Y = H - dist. 
+                    # Head Y = H - dist_head.
+                    # Tail Y = H - dist_tail.
+                    # Rect Top = Head Y (Smallest Y)
+                    rect_y = screen_h - dist_head
+                
+                # 3. Recycle Check
+                if falling_down:
+                    if rect_y > screen_h:
+                        to_recycle.append(bar)
+                        continue
+                else:
+                    # Moving Up. If the bottom of that rect (rect_y + height) is < 0, it is gone.
+                    if (rect_y + height_bar) < 0:
+                        to_recycle.append(bar)
+                        continue
+                
+                # 4. Fade Logic (Distance Traveled based)
+                # Use dist_head (leading edge travel distance)
                 alpha = 1.0
-                if y_bottom > Config.FADE_START_Y:
-                    dist_into_fade = y_bottom - Config.FADE_START_Y
+                if dist_head > Config.FADE_START_Y:
+                    dist_into_fade = dist_head - Config.FADE_START_Y
                     factor = 1.0 - (dist_into_fade / Config.FADE_RANGE)
                     alpha = max(0.0, min(1.0, factor))
-                
-                # Draw
+
+                # 5. Draw
+                # Optimization: Don't draw if transparent
+                if alpha <= 0.0:
+                    continue
+                    
                 x = Config.LANE_START_X + (bar.lane_index * Config.LANE_WIDTH)
                 
-                # Height
-                h = max(Config.BAR_HEIGHT, y_bottom - y_top)
-                
-                draw_y = y_bottom - h
-                
-                # Apply Color
                 c = QColor(Config.COLOR_BAR)
                 c.setAlphaF(alpha * (Config.COLOR_BAR.alphaF())) 
                 
                 painter.setBrush(QBrush(c))
                 painter.setPen(Qt.NoPen)
-                painter.drawRect(QRectF(x, draw_y, Config.BAR_WIDTH, h))
+                painter.drawRect(QRectF(x, rect_y, Config.BAR_WIDTH, height_bar))
 
-            # Recycle off-screen bars
+            # Recycle
             for bar in to_recycle:
                 try:
                     self.pool.active_bars.remove(bar)
@@ -230,9 +261,11 @@ class RainingKeysOverlay(QWidget):
         
         info = [
             f"FPS: {self.current_fps:.1f}",
-            f"Active Bars: {active_count} / {Config.MAX_BARS}",
-            f"Pool Size: {pool_size}",
-            f"Speed: {Config.SCROLL_SPEED} px/s"
+            f"Active: {active_count}",
+            f"Pool: {pool_size}",
+            f"Speed: {self.settings.scroll_speed}",
+            f"Dir: {self.settings.fall_direction}",
+            f"Pos: {self.x()},{self.y()}"
         ]
         
         for i, line in enumerate(info):
