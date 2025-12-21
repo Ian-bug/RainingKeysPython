@@ -93,7 +93,7 @@ You can edit this file manually or use the **GUI Settings Window**.
 
 ## Roadmap
 
-- [ ] Interactive Configuration UI (GUI for settings)
+- [x] Interactive Configuration UI (GUI for settings)
 - [x] Save/Load config from ini
 - [ ] Multi-monitor support
 - [ ] Custom skins/textures for bars
