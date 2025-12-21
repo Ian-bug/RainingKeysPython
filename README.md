@@ -92,12 +92,39 @@ You can edit this file manually or use the **GUI Settings Window**.
 
 *Note: Key mappings and colors are currently defined in `core/config.py`.*
 
+
+## Building from Source
+
+To create a standalone executable (Windows .exe):
+
+1.  Run the build script:
+    ```bash
+    python build.py
+    ```
+2.  The output will be in `dist/RainingKeysPython/`.
+
+### Debug vs Release Build
+You can toggle the console window visibility via `config.ini`:
+
+-   **Debug Mode** (Console visible):
+    ```ini
+    [General]
+    debug_mode = true
+    ```
+-   **Release Mode** (No console, default):
+    ```ini
+    [General]
+    debug_mode = false
+    ```
+    (Or simply omit the line)
+
 ## Roadmap
 
-- [ ] Interactive Configuration UI (GUI for settings)
-- [ ] Save/Load config from JSON/YAML
+- [x] Interactive Configuration UI (GUI for settings)
+- [x] Save/Load config from ini
 - [ ] Multi-monitor support
 - [ ] Custom skins/textures for bars
+
 
 ## Disclaimer
 
