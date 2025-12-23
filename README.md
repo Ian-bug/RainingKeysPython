@@ -112,6 +112,17 @@ You can edit this file manually or use the **GUI Settings Window**.
 
 This software is an unofficial community tool. It is not affiliated with, endorsed by, or connected to 7th Beat Games (developers of A Dance of Fire and Ice) or any other game developer. Use responsibly.
 
+## 🤝 Contributing
+
+Contributions are welcome! We'd love to make this tool better together.
+
+-   **Have a big idea or found a bug?**  
+    [Open an Issue](https://github.com/Ian-bug/RainingKeysPython/issues) and tell us about it!
+-   **Want to help implement a feature?**  
+    Fork the repository and submit a Pull Request.
+
+Any contributions you make are **greatly appreciated**.
+
 ## License
 
 MIT License. See `LICENSE` for details.
