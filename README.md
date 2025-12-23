@@ -41,12 +41,14 @@ RainingKeys is a purely external overlay application that visualizes keyboard in
 ```text
 RainingKeysPython/
 ├── core/
-│   ├── config.py       # User configuration (Keys, speeds, colors)
-│   ├── input_mon.py    # Global input listener
-│   └── overlay.py      # Main rendering loop and window logic
-├── build.py            # Build script for creating standalone executable
-├── main.py             # Application entry point
-└── requirements.txt    # Dependencies
+│   ├── config.py           # Default configuration constants
+│   ├── gui.py              # Configuration Window GUI
+│   ├── input_mon.py        # Global input listener
+│   ├── overlay.py          # Main rendering loop and window logic
+│   └── settings_manager.py # Handles config loading/saving
+├── build.py                # Build script for creating standalone executable
+├── main.py                 # Application entry point
+└── requirements.txt        # Dependencies
 ```
 
 ## Installation
