@@ -8,7 +8,7 @@ class SettingsWindow(QWidget):
     def __init__(self, settings_manager: SettingsManager):
         super().__init__()
         self.settings = settings_manager
-        self.setWindowTitle("RainingKeys Config")
+        self.setWindowTitle(f"RainingKeys Config v{Config.VERSION}")
         self.resize(300, 350)
 
         # Recording State

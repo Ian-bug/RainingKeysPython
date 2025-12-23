@@ -34,7 +34,7 @@ def main():
     input_mon.raw_key_pressed.connect(settings_win.handle_raw_key)
     input_mon.start()
     
-    print("RainingKeys started.")
+    print(f"RainingKeys v{Config.VERSION} started.")
     print(" - Overlay active.")
     print(" - Settings window open.")
     print("Press Ctrl+C in terminal to stop.")

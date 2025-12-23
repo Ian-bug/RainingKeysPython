@@ -8,3 +8,4 @@ dist/
 *.spec
 *.zip
 RainingKeysPython-debug
+RELEASE_NOTES.md
