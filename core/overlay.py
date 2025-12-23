@@ -99,19 +99,11 @@ class RainingKeysOverlay(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-        # Initial calculation for window size
-        # We need enough width for all lanes
-        max_lane = 0
-        if Config.LANE_MAP:
-             max_lane = max(Config.LANE_MAP.values())
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
         
-        # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
-        width = Config.LANE_START_X + ((max_lane + 1) * Config.LANE_WIDTH) + 50
-        height = QApplication.primaryScreen().size().height()
-        
-        self.resize(width, height)
-        # Move to configured position
-        self.move(self.settings.overlay_x, self.settings.overlay_y)
+        self.update_layout()
+
+        # Win32 Click-through
 
         # Win32 Click-through
         if HAS_WIN32:
@@ -125,6 +117,21 @@ class RainingKeysOverlay(QWidget):
     def on_settings_changed(self):
         # Move window live when settings change
         self.move(self.settings.overlay_x, self.settings.overlay_y)
+        self.update_layout() # Recalculate size if lanes changed
+
+    def update_layout(self):
+        """Recalculates window size based on current lanes."""
+        max_lane = 0
+        if Config.LANE_MAP:
+             max_lane = max(Config.LANE_MAP.values())
+        else:
+             max_lane = 0 # Fallback
+        
+        # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
+        width = Config.LANE_START_X + ((max_lane + 1) * Config.LANE_WIDTH) + 50
+        height = QApplication.primaryScreen().size().height()
+        
+        self.resize(width, height)
 
     def handle_input(self, lane_index, timestamp):
         """Slot called when input monitor detects a key press."""

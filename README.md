@@ -75,7 +75,10 @@ RainingKeysPython/
 ### Debug vs Release Build
 You can toggle the console window visibility via `config.ini`:** window (controls settings).
 3.  Use the Config window to move the overlay or change speed/direction live.
-4.  Press the configured keys (Default: `a`, `s`, `l`, `;`) to see the visualization.
+4.  **Configure Lanes**:
+    -   Click "Record Lane Keys" in the config window.
+    -   Press the keys you want to bind (e.g., `Z`, `X`, `.`, `/`).
+    -   Click "Stop Recording" to save. The overlay uses these keys immediately.
 5.  **To Exit**: Close the Config window or press `Ctrl+C` in the terminal.
 
 ## Configuration
@@ -91,6 +94,7 @@ You can edit this file manually or use the **GUI Settings Window**.
 | `Visual` | `fall_direction` | `down` or `up`. |
 | `Position` | `x` | Overlay X position (pixels). |
 | `Position` | `y` | Overlay Y position (pixels). |
+| `lanes` | `keys` | Comma-separated list of keys (e.g., `'z','x','.'`). |
 
 *Note: Key mappings and colors are currently defined in `core/config.py`.*
 
@@ -100,7 +104,7 @@ You can edit this file manually or use the **GUI Settings Window**.
 - [x] Save/Load config from ini
 - [ ] Multi-monitor support
 - [ ] Custom color
-- [ ] Custom key mapping 
+- [x] Custom key mapping 
 
 ## Disclaimer
 

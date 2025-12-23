@@ -27,6 +27,11 @@ def main():
     input_mon = InputMonitor()
     input_mon.key_pressed.connect(overlay.handle_input)
     input_mon.key_released.connect(overlay.handle_release)
+    input_mon = InputMonitor()
+    input_mon.key_pressed.connect(overlay.handle_input)
+    input_mon.key_released.connect(overlay.handle_release)
+    # Connect raw key signal to Settings Window for recording
+    input_mon.raw_key_pressed.connect(settings_win.handle_raw_key)
     input_mon.start()
     
     print("RainingKeys started.")

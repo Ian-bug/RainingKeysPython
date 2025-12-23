@@ -10,6 +10,7 @@ class InputWorker(QObject):
     """
     key_pressed = Signal(int, float)  # lane_index, timestamp
     key_released = Signal(int, float) # lane_index, timestamp
+    raw_key_pressed = Signal(str)     # raw_key_string
 
     def __init__(self):
         super().__init__()
@@ -47,6 +48,8 @@ class InputWorker(QObject):
         if k_str in self.active_keys:
             return
 
+        self.raw_key_pressed.emit(k_str)
+
         if k_str in Config.LANE_MAP:
             self.active_keys.add(k_str)
             timestamp = time.perf_counter()
@@ -73,12 +76,14 @@ class InputMonitor(QThread):
     """
     key_pressed = Signal(int, float)
     key_released = Signal(int, float)
+    raw_key_pressed = Signal(str)
 
     def __init__(self):
         super().__init__()
         self.worker = InputWorker()
         self.worker.key_pressed.connect(self.key_pressed.emit)
         self.worker.key_released.connect(self.key_released.emit)
+        self.worker.raw_key_pressed.connect(self.raw_key_pressed.emit)
 
     def run(self):
         self.worker.start_monitoring()
