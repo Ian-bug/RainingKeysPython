@@ -135,7 +135,6 @@ class SettingsWindow(QWidget):
         self.spin_kv_off_x.setValue(self.settings.kv_offset_x)
         self.spin_kv_off_x.valueChanged.connect(self.on_kv_changed)
         off_layout.addWidget(self.spin_kv_off_x)
-
         off_layout.addWidget(QLabel("Y:"))
         self.spin_kv_off_y = QSpinBox()
         self.spin_kv_off_y.setRange(-1000, 1000)
@@ -143,6 +142,17 @@ class SettingsWindow(QWidget):
         self.spin_kv_off_y.valueChanged.connect(self.on_kv_changed)
         off_layout.addWidget(self.spin_kv_off_y)
         kv_layout.addLayout(off_layout)
+
+        # Transparency Control
+        trans_layout = QHBoxLayout()
+        trans_layout.addWidget(QLabel("Inactive Opacity:"))
+        self.spin_kv_opacity = QSpinBox()
+        self.spin_kv_opacity.setRange(0, 100)
+        self.spin_kv_opacity.setSuffix("%")
+        self.spin_kv_opacity.setValue(int(self.settings.kv_opacity * 100))
+        self.spin_kv_opacity.valueChanged.connect(self.on_kv_changed)
+        trans_layout.addWidget(self.spin_kv_opacity)
+        kv_layout.addLayout(trans_layout)
 
         self.chk_kv_counts = QCheckBox("Show Key Counts")
         self.chk_kv_counts.setChecked(self.settings.kv_show_counts)
@@ -189,6 +199,7 @@ class SettingsWindow(QWidget):
         self.settings.set('keyviewer', 'panel_offset_x', self.spin_kv_off_x.value())
         self.settings.set('keyviewer', 'panel_offset_y', self.spin_kv_off_y.value())
         self.settings.set('keyviewer', 'show_counts', self.chk_kv_counts.isChecked())
+        self.settings.set('keyviewer', 'opacity', self.spin_kv_opacity.value() / 100.0)
         self.settings.save()
 
     def toggle_recording(self):

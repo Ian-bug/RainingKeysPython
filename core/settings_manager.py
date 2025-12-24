@@ -84,6 +84,10 @@ class SettingsManager(QObject):
             self.config.set('keyviewer', 'height', '50')
             changed = True
             
+        if not self.config.has_option('keyviewer', 'opacity'):
+            self.config.set('keyviewer', 'opacity', '0.2')
+            changed = True
+            
         if changed:
             self.save()
 
@@ -135,10 +139,6 @@ class SettingsManager(QObject):
     def scroll_speed(self):
         return self.get('Visual', 'scroll_speed', Config.SCROLL_SPEED, int)
     
-    @property
-    def scroll_speed(self):
-        return self.get('Visual', 'scroll_speed', Config.SCROLL_SPEED, int)
-    
     # REMOVED: fall_direction property
 
     @property
@@ -182,3 +182,6 @@ class SettingsManager(QObject):
     @property
     def kv_show_counts(self):
         return self.config.getboolean('keyviewer', 'show_counts')
+    @property
+    def kv_opacity(self):
+        return self.get('keyviewer', 'opacity', 0.2, float)

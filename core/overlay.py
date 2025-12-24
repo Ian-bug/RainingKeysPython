@@ -371,9 +371,11 @@ class RainingKeysOverlay(QWidget):
                  if bg_color.alpha() > 200:
                     bg_color = bg_color.lighter(120)
             else:
-                # Inactive: Scale alpha down (e.g. 20%)
+                # Inactive: Scale alpha down based on settings
                 current_alpha = bg_color.alpha()
-                new_alpha = max(20, int(current_alpha * 0.2))
+                # Opacity is 0.0 to 1.0. If opacity is 0.2, we want 20% of current alpha.
+                opacity_factor = self.settings.kv_opacity 
+                new_alpha = int(current_alpha * opacity_factor)
                 bg_color.setAlpha(new_alpha)
                 
             painter.setBrush(QBrush(bg_color))

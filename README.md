@@ -21,13 +21,14 @@ RainingKeys is a purely external overlay application that visualizes keyboard in
 - **External Overlay**: Runs as a transparent, always-on-top, click-through window over any game.
 - **Graphic Interface**: Live configuration window to adjust settings on the fly.
 - **Positioning**: Configurable X/Y overlay position.
-- **Fall Direction**: Supports both Down (Classic) and Up (Reverse) fall directions.
+- **Fall Direction**: Supports both Down (Classic) and Up (Reverse) fall directions (controlled by KeyViewer position).
 - **Accurate Timing**: Uses high-resolution monotonic clocks (`time.perf_counter`) for smooth, jitter-free falling animation.
 - **Lane System**: Configurable key-to-lane mapping (e.g., WASD, Space, Enter).
+- **KeyViewer Panel**: Visual keyboard representation that shows key presses and counts.
+- **KeyViewer Transparency**: Adjustable opacity for inactive keys.
+- **Custom Visuals**: Configurable colors (RGBA) and adjustable overlay speed.
 - **Long Press Support**: Visualizes held keys with variable-length bars.
 - **Performance Optimized**: Implements object pooling and efficient rendering logic to minimize CPU/GPU usage.
-- **Fade Out**: Distance-based fade-out for visual clarity.
-- **Input Latency Compensation**: Configurable offset to visually align inputs with audio latency.
 
 ## Tech Stack
 
@@ -66,22 +67,22 @@ RainingKeysPython/
 
 ## Usage
 
-1.  Run the build script:
+1.  Run the application:
     ```bash
-    python build.py
+    python main.py
     ```
-2.  The script will generate:
-    -   Folder: `dist/RainingKeysPython/`
-    -   Zip: `RainingKeysPython.zip` (or `RainingKeysPython-debug.zip` if in debug mode)
-
-### Debug vs Release Build
-You can toggle the console window visibility via `config.ini`:** window (controls settings).
-3.  Use the Config window to move the overlay or change speed/direction live.
-4.  **Configure Lanes**:
+2.  The application launches two windows:
+    -   **Transparent Overlay**: The visualizer itself (click-through).
+    -   **Config Window**: The controls (Alt+Tab to find if hidden).
+3.  **Configure Lanes**:
     -   Click "Record Lane Keys" in the config window.
     -   Press the keys you want to bind (e.g., `Z`, `X`, `.`, `/`).
-    -   Click "Stop Recording" to save. The overlay uses these keys immediately.
-5.  **To Exit**: Close the Config window or press `Ctrl+C` in the terminal.
+    -   Click "Stop Recording" to save.
+4.  **Customize**:
+    -   Adjust **Scroll Speed** and **Bar Color**.
+    -   Enable **KeyViewer** to see the static key panel.
+    -   Drag **Inactive Opacity** to change how faint unpressed keys look.
+    -   Change **KeyViewer Position** (Above/Below) to automatically flip the fall direction.
 
 ## Configuration
 
@@ -93,20 +94,22 @@ You can edit this file manually or use the **GUI Settings Window**.
 | Section | Parameter | Description |
 | :--- | :--- | :--- |
 | `Visual` | `scroll_speed` | Falling speed in pixels per second. |
-| `Visual` | `fall_direction` | `down` or `up`. |
+| `Visual` | `bar_color` | RGBA color string (e.g., `0,255,255,200`). |
 | `Position` | `x` | Overlay X position (pixels). |
 | `Position` | `y` | Overlay Y position (pixels). |
-| `lanes` | `keys` | Comma-separated list of keys (e.g., `'z','x','.'`). |
-
-*Note: Key mappings and colors are currently defined in `core/config.py`.*
+| `lanes` | `keys` | Comma-separated list of keys. |
+| `keyviewer` | `enabled` | Show/Hide KeyViewer panel. |
+| `keyviewer` | `panel_position` | `above` or `below`. Affects fall direction. |
+| `keyviewer` | `opacity` | Opacity of inactive keys (0.0 - 1.0). |
 
 ## Todo
 
-- [x] Interactive Configuration UI (GUI for settings)
-- [x] Save/Load config from ini
-- [ ] Multi-monitor support
-- [ ] Custom color
-- [x] Custom key mapping 
+- [x] Interactive Configuration UI
+- [x] Save/Load config
+- [x] Custom color selection
+- [x] Custom key mapping
+- [x] KeyViewer Panel & Key Counters
+- [ ] Multi-monitor support 
 
 ## Disclaimer
 
@@ -126,6 +129,8 @@ Any contributions you make are **greatly appreciated**.
 ## Credits
 
 This project is inspired by the **RainingKeys** mod for *A Dance of Fire and Ice*, originally created by **[paring-chan](https://github.com/paring-chan/RainingKeys)**.
+
+Also credits to **[AdofaiTweaks](https://github.com/PizzaLovers007/AdofaiTweaks)** by **PizzaLovers007**.
 
 ## License
 
