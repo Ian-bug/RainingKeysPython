@@ -27,14 +27,24 @@ class SettingsManager(QObject):
         if not self.config.has_section('lanes'):
             self.config.add_section('lanes')
             changed = True
+        if not self.config.has_section('keyviewer'):
+            self.config.add_section('keyviewer')
+            changed = True
             
         # Defaults
         if not self.config.has_option('Visual', 'scroll_speed'):
             self.config.set('Visual', 'scroll_speed', str(Config.SCROLL_SPEED))
             changed = True
-        if not self.config.has_option('Visual', 'fall_direction'):
-            self.config.set('Visual', 'fall_direction', 'down')
+        if not self.config.has_option('Visual', 'scroll_speed'):
+            self.config.set('Visual', 'scroll_speed', str(Config.SCROLL_SPEED))
             changed = True
+        
+        # Color (RGBA)
+        if not self.config.has_option('Visual', 'bar_color'):
+            # Default Cyan: 0, 255, 255, 200
+            self.config.set('Visual', 'bar_color', "0,255,255,200") 
+            changed = True
+        # REMOVED: Fall Direction (Now bound to Panel Position)
         if not self.config.has_option('Position', 'x'):
             self.config.set('Position', 'x', str(0))
             changed = True
@@ -50,6 +60,29 @@ class SettingsManager(QObject):
         
         # Apply lanes to Config
         self._apply_lanes()
+            
+        # KeyViewer defaults
+        if not self.config.has_option('keyviewer', 'enabled'):
+            self.config.set('keyviewer', 'enabled', 'True')
+            changed = True
+        if not self.config.has_option('keyviewer', 'layout'):
+            self.config.set('keyviewer', 'layout', 'horizontal')
+            changed = True
+        if not self.config.has_option('keyviewer', 'panel_position'):
+            self.config.set('keyviewer', 'panel_position', 'auto')
+            changed = True
+        if not self.config.has_option('keyviewer', 'panel_offset_x'):
+            self.config.set('keyviewer', 'panel_offset_x', '0')
+            changed = True
+        if not self.config.has_option('keyviewer', 'panel_offset_y'):
+            self.config.set('keyviewer', 'panel_offset_y', '0')
+            changed = True
+        if not self.config.has_option('keyviewer', 'show_counts'):
+            self.config.set('keyviewer', 'show_counts', 'True')
+            changed = True
+        if not self.config.has_option('keyviewer', 'height'):
+            self.config.set('keyviewer', 'height', '50')
+            changed = True
             
         if changed:
             self.save()
@@ -103,8 +136,10 @@ class SettingsManager(QObject):
         return self.get('Visual', 'scroll_speed', Config.SCROLL_SPEED, int)
     
     @property
-    def fall_direction(self):
-        return self.get('Visual', 'fall_direction', 'down', str)
+    def scroll_speed(self):
+        return self.get('Visual', 'scroll_speed', Config.SCROLL_SPEED, int)
+    
+    # REMOVED: fall_direction property
 
     @property
     def overlay_x(self):
@@ -113,3 +148,37 @@ class SettingsManager(QObject):
     @property
     def overlay_y(self):
         return self.get('Position', 'y', 0, int)
+
+    @property
+    def bar_color(self):
+        s = self.get('Visual', 'bar_color', "0,255,255,200", str)
+        try:
+            r, g, b, a = map(int, s.split(','))
+            from PySide6.QtGui import QColor 
+            return QColor(r, g, b, a)
+        except:
+            from PySide6.QtGui import QColor
+            return QColor(0, 255, 255, 200)
+
+    # KeyViewer Properties
+    @property
+    def kv_enabled(self):
+        return self.config.getboolean('keyviewer', 'enabled')
+    @property
+    def kv_layout(self):
+        return self.config.get('keyviewer', 'layout')
+    @property
+    def kv_position(self):
+        return self.config.get('keyviewer', 'panel_position')
+    @property
+    def kv_height(self):
+         return self.get('keyviewer', 'height', 50, int)
+    @property
+    def kv_offset_x(self):
+         return self.get('keyviewer', 'panel_offset_x', 0, int)
+    @property
+    def kv_offset_y(self):
+         return self.get('keyviewer', 'panel_offset_y', 0, int)
+    @property
+    def kv_show_counts(self):
+        return self.config.getboolean('keyviewer', 'show_counts')

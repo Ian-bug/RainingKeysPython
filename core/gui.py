@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QComboBox, QGroupBox, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QComboBox, QGroupBox, QPushButton, QCheckBox, QFrame, QColorDialog
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QColor, QPalette
 from .settings_manager import SettingsManager
@@ -45,15 +45,15 @@ class SettingsWindow(QWidget):
         vis_group = QGroupBox("Visual Settings")
         vis_layout = QVBoxLayout()
         
-        # Direction
-        dir_layout = QHBoxLayout()
-        dir_layout.addWidget(QLabel("Fall Direction:"))
-        self.combo_dir = QComboBox()
-        self.combo_dir.addItems(["down", "up"])
-        self.combo_dir.setCurrentText(self.settings.fall_direction)
-        self.combo_dir.currentTextChanged.connect(self.on_visual_changed)
-        dir_layout.addWidget(self.combo_dir)
-        vis_layout.addLayout(dir_layout)
+        # Direction (REMOVED: Bound to Position)
+        # dir_layout = QHBoxLayout()
+        # dir_layout.addWidget(QLabel("Fall Direction:"))
+        # self.combo_dir = QComboBox()
+        # self.combo_dir.addItems(["down", "up"])
+        # self.combo_dir.setCurrentText(self.settings.fall_direction)
+        # self.combo_dir.currentTextChanged.connect(self.on_visual_changed)
+        # dir_layout.addWidget(self.combo_dir)
+        # vis_layout.addLayout(dir_layout)
         
         # Speed
         speed_layout = QHBoxLayout()
@@ -65,6 +65,15 @@ class SettingsWindow(QWidget):
         self.spin_speed.valueChanged.connect(self.on_visual_changed)
         speed_layout.addWidget(self.spin_speed)
         vis_layout.addLayout(speed_layout)
+        
+        # Custom Color
+        color_layout = QHBoxLayout()
+        color_layout.addWidget(QLabel("Bar Color:"))
+        self.btn_color = QPushButton("Choose Color")
+        self.btn_color.clicked.connect(self.choose_color)
+        self.update_color_btn_style()
+        color_layout.addWidget(self.btn_color)
+        vis_layout.addLayout(color_layout)
         
         vis_group.setLayout(vis_layout)
         layout.addWidget(vis_group)
@@ -87,6 +96,61 @@ class SettingsWindow(QWidget):
 
         lane_group.setLayout(lane_layout)
         layout.addWidget(lane_group)
+
+        # KeyViewer Configuration Group
+        kv_group = QGroupBox("KeyViewer Panel")
+        kv_layout = QVBoxLayout()
+
+        self.chk_kv_enabled = QCheckBox("Enable KeyViewer")
+        self.chk_kv_enabled.setChecked(self.settings.kv_enabled)
+        self.chk_kv_enabled.stateChanged.connect(self.on_kv_changed)
+        kv_layout.addWidget(self.chk_kv_enabled)
+
+        # Layout & Position
+        kv_grid = QHBoxLayout()
+        kv_grid.addWidget(QLabel("Height:"))
+        self.spin_kv_height = QSpinBox()
+        self.spin_kv_height.setRange(10, 500)
+        self.spin_kv_height.setValue(self.settings.kv_height)
+        self.spin_kv_height.valueChanged.connect(self.on_kv_changed)
+        kv_grid.addWidget(self.spin_kv_height)
+        
+        kv_grid.addWidget(QLabel("Pos:"))
+        self.combo_kv_pos = QComboBox()
+        self.combo_kv_pos.addItems(["below", "above"])
+        # Handle removed 'auto' gracefully if config still has it
+        current = self.settings.kv_position
+        if current not in ["below", "above"]:
+             current = "below" 
+        self.combo_kv_pos.setCurrentText(current)
+        self.combo_kv_pos.currentTextChanged.connect(self.on_kv_changed)
+        kv_grid.addWidget(self.combo_kv_pos)
+        kv_layout.addLayout(kv_grid)
+
+        # Offsets
+        off_layout = QHBoxLayout()
+        off_layout.addWidget(QLabel("Offset X:"))
+        self.spin_kv_off_x = QSpinBox()
+        self.spin_kv_off_x.setRange(-1000, 1000)
+        self.spin_kv_off_x.setValue(self.settings.kv_offset_x)
+        self.spin_kv_off_x.valueChanged.connect(self.on_kv_changed)
+        off_layout.addWidget(self.spin_kv_off_x)
+
+        off_layout.addWidget(QLabel("Y:"))
+        self.spin_kv_off_y = QSpinBox()
+        self.spin_kv_off_y.setRange(-1000, 1000)
+        self.spin_kv_off_y.setValue(self.settings.kv_offset_y)
+        self.spin_kv_off_y.valueChanged.connect(self.on_kv_changed)
+        off_layout.addWidget(self.spin_kv_off_y)
+        kv_layout.addLayout(off_layout)
+
+        self.chk_kv_counts = QCheckBox("Show Key Counts")
+        self.chk_kv_counts.setChecked(self.settings.kv_show_counts)
+        self.chk_kv_counts.stateChanged.connect(self.on_kv_changed)
+        kv_layout.addWidget(self.chk_kv_counts)
+
+        kv_group.setLayout(kv_layout)
+        layout.addWidget(kv_group)
         
         layout.addStretch()
         self.setLayout(layout)
@@ -96,9 +160,35 @@ class SettingsWindow(QWidget):
         self.settings.set('Position', 'y', self.spin_y.value())
         self.settings.save() 
         
+    def choose_color(self):
+        current = self.settings.bar_color
+        color = QColorDialog.getColor(current, self, "Select Bar Color", QColorDialog.ShowAlphaChannel)
+        if color.isValid():
+            rgba = f"{color.red()},{color.green()},{color.blue()},{color.alpha()}"
+            self.settings.set('Visual', 'bar_color', rgba)
+            self.settings.save()
+            self.update_color_btn_style()
+            
+    def update_color_btn_style(self):
+        c = self.settings.bar_color
+        # Text color contrasting
+        text_col = "black" if c.lightness() > 128 else "white"
+        style = f"background-color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); color: {text_col};"
+        self.btn_color.setStyleSheet(style)
+        self.btn_color.setText(f"RGBA({c.red()},{c.green()},{c.blue()},{c.alpha()})") 
+        
     def on_visual_changed(self):
-        self.settings.set('Visual', 'fall_direction', self.combo_dir.currentText())
+        # self.settings.set('Visual', 'fall_direction', self.combo_dir.currentText())
         self.settings.set('Visual', 'scroll_speed', self.spin_speed.value())
+        self.settings.save()
+
+    def on_kv_changed(self):
+        self.settings.set('keyviewer', 'enabled', self.chk_kv_enabled.isChecked())
+        self.settings.set('keyviewer', 'height', self.spin_kv_height.value())
+        self.settings.set('keyviewer', 'panel_position', self.combo_kv_pos.currentText())
+        self.settings.set('keyviewer', 'panel_offset_x', self.spin_kv_off_x.value())
+        self.settings.set('keyviewer', 'panel_offset_y', self.spin_kv_off_y.value())
+        self.settings.set('keyviewer', 'show_counts', self.chk_kv_counts.isChecked())
         self.settings.save()
 
     def toggle_recording(self):

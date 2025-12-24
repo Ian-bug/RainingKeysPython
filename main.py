@@ -5,6 +5,7 @@ from core.overlay import RainingKeysOverlay
 from core.input_mon import InputMonitor
 from core.settings_manager import SettingsManager
 from core.gui import SettingsWindow
+from core.config import Config
 
 def main():
     # Allow Ctrl+C to terminate the application immediately
@@ -24,9 +25,6 @@ def main():
     overlay.show()
     
     # Create and start the input monitor thread
-    input_mon = InputMonitor()
-    input_mon.key_pressed.connect(overlay.handle_input)
-    input_mon.key_released.connect(overlay.handle_release)
     input_mon = InputMonitor()
     input_mon.key_pressed.connect(overlay.handle_input)
     input_mon.key_released.connect(overlay.handle_release)

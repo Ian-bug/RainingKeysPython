@@ -3,8 +3,12 @@ from PySide6.QtGui import QColor
 class Config:
     # Visual Settings
     SCROLL_SPEED = 800  # Pixels per second
-    BAR_WIDTH = 60      # Width of a single note bar
+    LANE_WIDTH = 70     # Horizontal spacing between lane starts
+    BAR_WIDTH = LANE_WIDTH # Width of a single note bar (Gapless: Matches Lane Width)
     BAR_HEIGHT = 20     # Visual thickness of the bar (does not affect timing)
+    
+    # KeyViewer
+    KV_HEIGHT = 50      # Height of the KeyViewer bar
     
     # Lane Configuration
     # Maps key strings (pynput format) to lane indices (0-based)
@@ -14,7 +18,7 @@ class Config:
         "'l'": 2,
         "';'": 3
     }
-    LANE_WIDTH = 70     # Horizontal spacing between lane starts
+    # LANE_WIDTH moved up to link with BAR_WIDTH
     LANE_START_X = 50   # Starting X offset for the first lane
 
     # Performance & Logic
@@ -33,3 +37,5 @@ class Config:
     COLOR_BAR = QColor(100, 200, 255, 200)
     COLOR_BAR_BORDER = QColor(255, 255, 255, 230)
     COLOR_DEBUG_TEXT = QColor(0, 255, 0, 255)
+
+    VERSION = "1.1.1"
