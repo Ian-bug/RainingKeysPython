@@ -31,11 +31,11 @@ class Config:
     FADE_RANGE = 200    # Distance over which it fades to 0 opacity
 
     # Debugging
-    DEBUG_MODE = True
+    DEBUG_MODE = False
 
     # Colors (R, G, B, A)
     COLOR_BAR = QColor(100, 200, 255, 200)
     COLOR_BAR_BORDER = QColor(255, 255, 255, 230)
     COLOR_DEBUG_TEXT = QColor(0, 255, 0, 255)
 
-    VERSION = "1.1.1"
+    VERSION = "1.2.0"

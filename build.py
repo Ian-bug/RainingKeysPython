@@ -90,7 +90,18 @@ def update_config_debug_mode(debug_mode):
     """Updates config.ini to match the current build mode."""
     # We read the config to preserve other settings, but force debug_mode
     config = configparser.ConfigParser()
-    config.read(CONFIG_FILES)
+    
+    # Manually read to handle potential BOM (Byte Order Mark) issues
+    read_success = False
+    for cfg in CONFIG_FILES:
+        if os.path.exists(cfg):
+            try:
+                with open(cfg, 'r', encoding='utf-8-sig') as f:
+                    config.read_file(f)
+                read_success = True
+                break
+            except Exception as e:
+                print(f"Warning: Could not read {cfg}: {e}")
     
     # Ensure sections exist
     if not config.has_section('General'):
@@ -106,7 +117,7 @@ def update_config_debug_mode(debug_mode):
     # Write back
     # We pick the first available config file to write to, usually config.ini
     target_cfg = CONFIG_FILES[0]
-    with open(target_cfg, 'w') as f:
+    with open(target_cfg, 'w', encoding='utf-8') as f:
         config.write(f)
 
 def run_build_cycle(debug_mode):
