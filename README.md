@@ -123,6 +123,10 @@ Contributions are welcome! We'd love to make this tool better together.
 
 Any contributions you make are **greatly appreciated**.
 
+## Credits
+
+This project is inspired by the **RainingKeys** mod for *A Dance of Fire and Ice*, originally created by **[paring-chan](https://github.com/paring-chan/RainingKeys)**.
+
 ## License
 
 MIT License. See `LICENSE` for details.
