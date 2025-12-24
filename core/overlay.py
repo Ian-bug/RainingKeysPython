@@ -214,8 +214,6 @@ class RainingKeysOverlay(QWidget):
             kv_geom = self.get_kv_geometry(screen_h)       
             
             # Origin Y determines where bars start
-            # If Top: Start at Bottom of KV (y + h)
-            # If Bottom: Start at Top of KV (y)
             if kv_geom['is_top']:
                 origin_y = kv_geom['y'] + kv_geom['height']
                 direction = 1 # Down (Positive Y)
@@ -223,84 +221,8 @@ class RainingKeysOverlay(QWidget):
                 origin_y = kv_geom['y']
                 direction = -1 # Up (Negative Y)
                 
-            speed = self.settings.scroll_speed
-            
-            to_recycle = []
+            self._draw_active_bars(painter, current_time, screen_h, origin_y, direction)
 
-            # Bar Drawing Loop
-            for bar in self.pool.active_bars:
-                # 1. Physics
-                delta_press = current_time - bar.press_time + Config.INPUT_LATENCY_OFFSET
-                dist_head = delta_press * speed
-                
-                if bar.release_time is None:
-                    dist_tail = Config.INPUT_LATENCY_OFFSET * speed
-                else:
-                    delta_release = current_time - bar.release_time + Config.INPUT_LATENCY_OFFSET
-                    dist_tail = delta_release * speed
-
-                # 2. Geometry
-                height_bar = dist_head - dist_tail
-                if height_bar < Config.BAR_HEIGHT:
-                     height_bar = Config.BAR_HEIGHT
-                     dist_tail = dist_head - height_bar
-                
-                # 3. Screen Position
-                # Head is the "Furthest" point from origin
-                # Tail is the "Closest" point to origin
-                
-                if direction == 1: # Moving Down
-                    # Origin is Top. Head is below Tail.
-                    # Top of Rect = Tail Y
-                    # Tail Y = Origin + dist_tail
-                    rect_y = origin_y + dist_tail
-                else: # Moving Up
-                    # Origin is Bottom. Head is above Tail.
-                    # Top of Rect = Head Y
-                    # Head Y = Origin - dist_head
-                    rect_y = origin_y - dist_head
-                
-                # 4. Recycle Check
-                if direction == 1:
-                    if rect_y > screen_h:
-                        to_recycle.append(bar)
-                        continue
-                else:
-                     if (rect_y + height_bar) < 0:
-                        to_recycle.append(bar)
-                        continue
-
-                # 5. Fade Logic
-                alpha = 1.0
-                if dist_head > Config.FADE_START_Y:
-                    dist_into_fade = dist_head - Config.FADE_START_Y
-                    factor = 1.0 - (dist_into_fade / Config.FADE_RANGE)
-                    alpha = max(0.0, min(1.0, factor))
-
-                if alpha <= 0.0:
-                    continue
-                    
-                x = Config.LANE_START_X + (bar.lane_index * Config.LANE_WIDTH) + self.settings.kv_offset_x
-                
-                # Use Custom Color
-                base_c = self.settings.bar_color
-                c = QColor(base_c)
-                # Apply fade alpha to the base alpha
-                final_alpha = alpha * (base_c.alphaF()) 
-                c.setAlphaF(final_alpha)
-                
-                painter.setBrush(QBrush(c))
-                painter.setPen(Qt.NoPen)
-                painter.drawRect(QRectF(x, rect_y, Config.BAR_WIDTH, height_bar))
-
-            # Recycle
-            for bar in to_recycle:
-                try:
-                    self.pool.active_bars.remove(bar)
-                    self.pool.recycle(bar)
-                except ValueError:
-                    pass
-                
             # Draw KeyViewer Panel
             if self.settings.kv_enabled:
                  self.draw_keyviewer(painter, kv_geom)
@@ -314,6 +236,86 @@ class RainingKeysOverlay(QWidget):
         finally:
             if painter.isActive():
                 painter.end()
+
+    def _draw_active_bars(self, painter, current_time, screen_h, origin_y, direction):
+        speed = self.settings.scroll_speed
+        to_recycle = []
+
+        # Bar Drawing Loop
+        for bar in self.pool.active_bars:
+            should_recycle = self._process_bar(painter, bar, current_time, speed, origin_y, direction, screen_h)
+            if should_recycle:
+                to_recycle.append(bar)
+
+        # Recycle
+        for bar in to_recycle:
+            try:
+                self.pool.active_bars.remove(bar)
+                self.pool.recycle(bar)
+            except ValueError:
+                pass
+
+    def _process_bar(self, painter, bar, current_time, speed, origin_y, direction, screen_h):
+        """
+        Calculates bar position, handles fade, draws it.
+        Returns True if the bar should be recycled.
+        """
+        # 1. Physics
+        delta_press = current_time - bar.press_time + Config.INPUT_LATENCY_OFFSET
+        dist_head = delta_press * speed
+        
+        if bar.release_time is None:
+            dist_tail = Config.INPUT_LATENCY_OFFSET * speed
+        else:
+            delta_release = current_time - bar.release_time + Config.INPUT_LATENCY_OFFSET
+            dist_tail = delta_release * speed
+
+        # 2. Geometry
+        height_bar = dist_head - dist_tail
+        if height_bar < Config.BAR_HEIGHT:
+                height_bar = Config.BAR_HEIGHT
+                dist_tail = dist_head - height_bar
+        
+        # 3. Screen Position
+        if direction == 1: # Moving Down
+            rect_y = origin_y + dist_tail
+        else: # Moving Up
+            rect_y = origin_y - dist_head
+        
+        # 4. Recycle Check
+        if direction == 1:
+            if rect_y > screen_h:
+                return True
+        else:
+                if (rect_y + height_bar) < 0:
+                # Top of rect (visually bottom if up?)
+                # If moving up, rect_y is the top edge.
+                # If rect_y + height < 0, it's off top screen
+                    return True
+
+        # 5. Fade Logic
+        alpha = 1.0
+        if dist_head > Config.FADE_START_Y:
+            dist_into_fade = dist_head - Config.FADE_START_Y
+            factor = 1.0 - (dist_into_fade / Config.FADE_RANGE)
+            alpha = max(0.0, min(1.0, factor))
+
+        if alpha <= 0.0:
+            return False # Not visible but maybe not recycled yet (wait for off-screen)
+            
+        x = Config.LANE_START_X + (bar.lane_index * Config.LANE_WIDTH) + self.settings.kv_offset_x
+        
+        # Usage Custom Color
+        base_c = self.settings.bar_color
+        c = QColor(base_c)
+        final_alpha = alpha * (base_c.alphaF()) 
+        c.setAlphaF(final_alpha)
+        
+        painter.setBrush(QBrush(c))
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(QRectF(x, rect_y, Config.BAR_WIDTH, height_bar))
+        
+        return False
 
     def draw_debug(self, painter, current_time):
         self.frame_count += 1
@@ -352,63 +354,65 @@ class RainingKeysOverlay(QWidget):
         ordered_keys = sorted(Config.LANE_MAP.items(), key=lambda item: item[1])
         
         painter.setFont(QFont("Arial", 12, QFont.Bold))
-        
-        # Custom Color
         default_color = self.settings.bar_color
         
         for k_str, lane_idx in ordered_keys:
             kx = Config.LANE_START_X + (lane_idx * Config.LANE_WIDTH) + self.settings.kv_offset_x
             ky = start_y
             
-            k_rect = QRectF(kx, ky, key_width, key_height)
+            # Context for rendering a single key
+            ctx = {
+                'painter': painter,
+                'lane_idx': lane_idx,
+                'k_str': k_str,
+                'rect': QRectF(kx, ky, key_width, key_height),
+                'base_color': default_color,
+                'geom': geom
+            }
             
-            is_pressed = lane_idx in self.active_keys_visual
-            
-            # Draw Background
-            bg_color = QColor(default_color) 
-            if is_pressed:
-                 # Active: Use full alpha (or slightly lighter)
-                 if bg_color.alpha() > 200:
-                    bg_color = bg_color.lighter(120)
-            else:
-                # Inactive: Scale alpha down based on settings
-                current_alpha = bg_color.alpha()
-                # Opacity is 0.0 to 1.0. If opacity is 0.2, we want 20% of current alpha.
-                opacity_factor = self.settings.kv_opacity 
-                new_alpha = int(current_alpha * opacity_factor)
-                bg_color.setAlpha(new_alpha)
-                
-            painter.setBrush(QBrush(bg_color))
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(k_rect)
+            self._draw_key_button(ctx)
 
-            # Text
-            display_text = k_str.replace("'", "").upper()
-            if "KEY." in display_text:
-                 display_text = display_text.replace("KEY.", "")
+    def _draw_key_button(self, ctx):
+        """Draws a single key (bg, text, count) using the provided context."""
+        painter = ctx['painter']
+        lane_idx = ctx['lane_idx']
+        k_rect = ctx['rect']
+        base_color = ctx['base_color']
+        
+        is_pressed = lane_idx in self.active_keys_visual
+        
+        # 1. Background
+        bg_color = QColor(base_color) 
+        if is_pressed:
+                if bg_color.alpha() > 200:
+                    bg_color = bg_color.lighter(120)
+        else:
+            current_alpha = bg_color.alpha()
+            opacity_factor = self.settings.kv_opacity 
+            new_alpha = int(current_alpha * opacity_factor)
+            bg_color.setAlpha(new_alpha)
             
-            painter.setPen(QColor("white"))
-            painter.drawText(k_rect, Qt.AlignCenter, display_text)
+        painter.setBrush(QBrush(bg_color))
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(k_rect)
+
+        # 2. Text
+        display_text = ctx['k_str'].replace("'", "").upper()
+        if "KEY." in display_text:
+                display_text = display_text.replace("KEY.", "")
+        
+        painter.setPen(QColor("white"))
+        painter.drawText(k_rect, Qt.AlignCenter, display_text)
+        
+        # 3. Count
+        if self.settings.kv_show_counts:
+            count_val = self.key_counts.get(lane_idx, 0)
             
-            # Count
-            if self.settings.kv_show_counts:
-                count_val = self.key_counts.get(lane_idx, 0)
-                
-                # Position counts based on flow
-                if geom['is_top']:
-                     # Flowing Down -> Counts Below? Or Above?
-                     # If Top, Usually counts inside or above.
-                     # Let's put counts OPPOSITE to flow?
-                     # If flow down, bar is below top. 
-                     # Image showed counts ABOVE bar.
-                     # Let's just put counts ABOVE by default for now (y - 25)
-                     count_rect = QRectF(kx, ky - 25, key_width, 20)
-                else:
-                     # Flowing Up (KV at Bottom)
-                     # Counts Above
-                     count_rect = QRectF(kx, ky - 25, key_width, 20)
-                
-                painter.setFont(QFont("Arial", 10, QFont.Bold))
-                painter.drawText(count_rect, Qt.AlignCenter, str(count_val))
-                painter.setFont(QFont("Arial", 12, QFont.Bold))
+            # Position counts based on flow (Always above for now based on logic)
+            # x is k_rect.x(), y is k_rect.y() - 25, width/height same logic
+            count_rect = QRectF(k_rect.x(), k_rect.y() - 25, k_rect.width(), 20)
+            
+            painter.setFont(QFont("Arial", 10, QFont.Bold))
+            painter.drawText(count_rect, Qt.AlignCenter, str(count_val))
+            painter.setFont(QFont("Arial", 12, QFont.Bold))
 

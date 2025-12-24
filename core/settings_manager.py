@@ -6,6 +6,30 @@ from .config import Config
 class SettingsManager(QObject):
     settings_changed = Signal()
 
+    DEFAULTS = {
+        'Visual': {
+            'scroll_speed': str(Config.SCROLL_SPEED),
+            'bar_color': "0,255,255,200"
+        },
+        'Position': {
+            'x': '0',
+            'y': '0'
+        },
+        'lanes': {
+            'keys': "'a','s','l',';'"
+        },
+        'keyviewer': {
+            'enabled': 'True',
+            'layout': 'horizontal',
+            'panel_position': 'auto',
+            'panel_offset_x': '0',
+            'panel_offset_y': '0',
+            'show_counts': 'True',
+            'height': '50',
+            'opacity': '0.2'
+        }
+    }
+
     def __init__(self, filename="config.ini"):
         super().__init__()
         self.filename = filename
@@ -13,81 +37,25 @@ class SettingsManager(QObject):
         self._load()
 
     def _load(self):
+        """Loads configuration from file, applying defaults where missing."""
         if os.path.exists(self.filename):
             self.config.read(self.filename)
         
-        # Ensure sections exist with defaults if missing
         changed = False
-        if not self.config.has_section('Visual'):
-            self.config.add_section('Visual')
-            changed = True
-        if not self.config.has_section('Position'):
-            self.config.add_section('Position')
-            changed = True
-        if not self.config.has_section('lanes'):
-            self.config.add_section('lanes')
-            changed = True
-        if not self.config.has_section('keyviewer'):
-            self.config.add_section('keyviewer')
-            changed = True
-            
-        # Defaults
-        if not self.config.has_option('Visual', 'scroll_speed'):
-            self.config.set('Visual', 'scroll_speed', str(Config.SCROLL_SPEED))
-            changed = True
-        if not self.config.has_option('Visual', 'scroll_speed'):
-            self.config.set('Visual', 'scroll_speed', str(Config.SCROLL_SPEED))
-            changed = True
         
-        # Color (RGBA)
-        if not self.config.has_option('Visual', 'bar_color'):
-            # Default Cyan: 0, 255, 255, 200
-            self.config.set('Visual', 'bar_color', "0,255,255,200") 
-            changed = True
-        # REMOVED: Fall Direction (Now bound to Panel Position)
-        if not self.config.has_option('Position', 'x'):
-            self.config.set('Position', 'x', str(0))
-            changed = True
-        if not self.config.has_option('Position', 'y'):
-            self.config.set('Position', 'y', str(0))
-            changed = True
+        for section, options in self.DEFAULTS.items():
+            if not self.config.has_section(section):
+                self.config.add_section(section)
+                changed = True
             
-        if not self.config.has_option('lanes', 'keys'):
-            # Default keys
-            default_keys = "'a','s','l',';'"
-            self.config.set('lanes', 'keys', default_keys)
-            changed = True
-        
+            for key, val in options.items():
+                if not self.config.has_option(section, key):
+                    self.config.set(section, key, val)
+                    changed = True
+                    
         # Apply lanes to Config
         self._apply_lanes()
-            
-        # KeyViewer defaults
-        if not self.config.has_option('keyviewer', 'enabled'):
-            self.config.set('keyviewer', 'enabled', 'True')
-            changed = True
-        if not self.config.has_option('keyviewer', 'layout'):
-            self.config.set('keyviewer', 'layout', 'horizontal')
-            changed = True
-        if not self.config.has_option('keyviewer', 'panel_position'):
-            self.config.set('keyviewer', 'panel_position', 'auto')
-            changed = True
-        if not self.config.has_option('keyviewer', 'panel_offset_x'):
-            self.config.set('keyviewer', 'panel_offset_x', '0')
-            changed = True
-        if not self.config.has_option('keyviewer', 'panel_offset_y'):
-            self.config.set('keyviewer', 'panel_offset_y', '0')
-            changed = True
-        if not self.config.has_option('keyviewer', 'show_counts'):
-            self.config.set('keyviewer', 'show_counts', 'True')
-            changed = True
-        if not self.config.has_option('keyviewer', 'height'):
-            self.config.set('keyviewer', 'height', '50')
-            changed = True
-            
-        if not self.config.has_option('keyviewer', 'opacity'):
-            self.config.set('keyviewer', 'opacity', '0.2')
-            changed = True
-            
+
         if changed:
             self.save()
 
