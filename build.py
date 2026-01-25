@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+from core.settings_manager import SettingsManager
 
 CONFIG_FILES = ['config.ini', 'config.cfg']
 OUTPUT_DIR = 'dist'
@@ -123,6 +124,16 @@ def update_config_debug_mode(debug_mode):
 def run_build_cycle(debug_mode):
     print(f"\n>>> Starting {'DEBUG' if debug_mode else 'RELEASE'} Build Cycle <<<")
     
+    # Reset config to defaults if building for Release
+    if not debug_mode:
+        print("Resetting configuration to defaults for Release build...")
+        try:
+            settings = SettingsManager()
+            settings.reset_to_defaults()
+            print("Configuration reset successful.")
+        except Exception as e:
+            print(f"Warning: Failed to reset configuration: {e}")
+
     # Update config file so the built executable reads the correct mode at runtime
     # AND so that the copy_config_to_dist puts the correct config in the dist folder
     update_config_debug_mode(debug_mode)

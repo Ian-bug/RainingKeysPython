@@ -89,3 +89,15 @@ class SettingsManager(QObject):
     def update_lanes(self, key_list):
         self.app_config.set_lane_keys(key_list)
         self.save()
+
+    def reset_to_defaults(self):
+        """Resets configuration to default values."""
+        default_config = AppConfig()
+        
+        # Replace sub-objects with defaults
+        self.app_config.visual = default_config.visual
+        self.app_config.position = default_config.position
+        self.app_config.key_viewer = default_config.key_viewer
+        self.app_config.lane_map = default_config.lane_map
+        
+        self.save()

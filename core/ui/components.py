@@ -13,6 +13,7 @@ class PositionSettingsGroup(QGroupBox):
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.init_ui()
+        self.settings.settings_changed.connect(self.update_from_config)
 
     def init_ui(self):
         layout = QHBoxLayout()
@@ -38,12 +39,21 @@ class PositionSettingsGroup(QGroupBox):
         self.config.position.y = self.spin_y.value()
         self.settings.save()
 
+    def update_from_config(self):
+        self.spin_x.blockSignals(True)
+        self.spin_y.blockSignals(True)
+        self.spin_x.setValue(self.config.position.x)
+        self.spin_y.setValue(self.config.position.y)
+        self.spin_x.blockSignals(False)
+        self.spin_y.blockSignals(False)
+
 class VisualSettingsGroup(QGroupBox):
     def __init__(self, settings_manager: SettingsManager, parent=None):
         super().__init__("Visual Settings", parent)
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.init_ui()
+        self.settings.settings_changed.connect(self.update_from_config)
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -91,6 +101,12 @@ class VisualSettingsGroup(QGroupBox):
         self.btn_color.setStyleSheet(style)
         self.btn_color.setText(f"RGBA({c.red()},{c.green()},{c.blue()},{c.alpha()})")
 
+    def update_from_config(self):
+        self.spin_speed.blockSignals(True)
+        self.spin_speed.setValue(self.config.visual.scroll_speed)
+        self.spin_speed.blockSignals(False)
+        self.update_color_btn_style()
+
 class LaneSettingsGroup(QGroupBox):
     record_toggled = Signal(bool) # Emits is_recording state
 
@@ -100,6 +116,7 @@ class LaneSettingsGroup(QGroupBox):
         self.config = self.settings.app_config
         self.is_recording = False
         self.init_ui()
+        self.settings.settings_changed.connect(self.update_from_config)
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -115,6 +132,9 @@ class LaneSettingsGroup(QGroupBox):
         self.lbl_instruction = QLabel("Click 'Record', then press keys in order.\nClick 'Stop' when done.")
         self.lbl_instruction.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self.lbl_instruction)
+
+    def update_from_config(self):
+        self.update_status("Current Keys: " + str(len(self.config.lane_map)))
 
         self.setLayout(layout)
 
@@ -139,6 +159,7 @@ class KeyViewerSettingsGroup(QGroupBox):
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.init_ui()
+        self.settings.settings_changed.connect(self.update_from_config)
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -212,3 +233,35 @@ class KeyViewerSettingsGroup(QGroupBox):
         self.config.key_viewer.show_counts = self.chk_kv_counts.isChecked()
         self.config.key_viewer.opacity = self.spin_kv_opacity.value() / 100.0
         self.settings.save()
+
+    def update_from_config(self):
+        self.chk_kv_enabled.blockSignals(True)
+        self.chk_kv_enabled.setChecked(self.config.key_viewer.enabled)
+        self.chk_kv_enabled.blockSignals(False)
+
+        self.spin_kv_height.blockSignals(True)
+        self.spin_kv_height.setValue(self.config.key_viewer.height)
+        self.spin_kv_height.blockSignals(False)
+
+        self.combo_kv_pos.blockSignals(True)
+        current = self.config.key_viewer.panel_position
+        if current not in ["below", "above"]:
+             current = "below"
+        self.combo_kv_pos.setCurrentText(current)
+        self.combo_kv_pos.blockSignals(False)
+
+        self.spin_kv_off_x.blockSignals(True)
+        self.spin_kv_off_x.setValue(self.config.key_viewer.panel_offset_x)
+        self.spin_kv_off_x.blockSignals(False)
+
+        self.spin_kv_off_y.blockSignals(True)
+        self.spin_kv_off_y.setValue(self.config.key_viewer.panel_offset_y)
+        self.spin_kv_off_y.blockSignals(False)
+
+        self.spin_kv_opacity.blockSignals(True)
+        self.spin_kv_opacity.setValue(int(self.config.key_viewer.opacity * 100))
+        self.spin_kv_opacity.blockSignals(False)
+
+        self.chk_kv_counts.blockSignals(True)
+        self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)
+        self.chk_kv_counts.blockSignals(False)

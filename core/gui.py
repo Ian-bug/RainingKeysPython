@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QPushButton
 from PySide6.QtCore import Slot
 from .settings_manager import SettingsManager
 from .ui.components import (
@@ -51,6 +51,12 @@ class SettingsWindow(QWidget):
         
         self.kv_group = KeyViewerSettingsGroup(self.settings)
         layout.addWidget(self.kv_group)
+
+        # Reset Button
+        self.btn_reset = QPushButton("Reset Config to Defaults")
+        self.btn_reset.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 8px;")
+        self.btn_reset.clicked.connect(self.settings.reset_to_defaults)
+        layout.addWidget(self.btn_reset)
         
         layout.addStretch()
         
