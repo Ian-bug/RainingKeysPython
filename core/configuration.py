@@ -47,7 +47,7 @@ class AppConfig:
     FADE_START_Y: int = 800
     FADE_RANGE: int = 200
     DEBUG_MODE: bool = False
-    VERSION: str = "1.2.0"
+    VERSION: str = "1.3.0"
     
     # Derived properties could go here, but kept simple for now
     
