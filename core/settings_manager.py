@@ -1,155 +1,91 @@
 import configparser
 import os
 from PySide6.QtCore import QObject, Signal
-from .config import Config
+from .configuration import AppConfig
 
 class SettingsManager(QObject):
     settings_changed = Signal()
 
-    DEFAULTS = {
-        'Visual': {
-            'scroll_speed': str(Config.SCROLL_SPEED),
-            'bar_color': "0,255,255,200"
-        },
-        'Position': {
-            'x': '0',
-            'y': '0'
-        },
-        'lanes': {
-            'keys': "'a','s','l',';'"
-        },
-        'keyviewer': {
-            'enabled': 'True',
-            'layout': 'horizontal',
-            'panel_position': 'auto',
-            'panel_offset_x': '0',
-            'panel_offset_y': '0',
-            'show_counts': 'True',
-            'height': '50',
-            'opacity': '0.2'
-        }
-    }
-
     def __init__(self, filename="config.ini"):
         super().__init__()
         self.filename = filename
-        self.config = configparser.ConfigParser()
-        self._load()
+        self.config_parser = configparser.ConfigParser()
+        self.app_config = AppConfig()
+        self.load()
 
-    def _load(self):
-        """Loads configuration from file, applying defaults where missing."""
+    def load(self):
+        """Loads configuration from file."""
         if os.path.exists(self.filename):
-            self.config.read(self.filename)
-        
-        changed = False
-        
-        for section, options in self.DEFAULTS.items():
-            if not self.config.has_section(section):
-                self.config.add_section(section)
-                changed = True
+            self.config_parser.read(self.filename)
             
-            for key, val in options.items():
-                if not self.config.has_option(section, key):
-                    self.config.set(section, key, val)
-                    changed = True
-                    
-        # Apply lanes to Config
-        self._apply_lanes()
+            # Visual
+            if self.config_parser.has_section('Visual'):
+                self.app_config.visual.scroll_speed = self.config_parser.getint('Visual', 'scroll_speed', fallback=800)
+                self.app_config.visual.bar_color_str = self.config_parser.get('Visual', 'bar_color', fallback="0,255,255,200")
 
-        if changed:
+            # Position
+            if self.config_parser.has_section('Position'):
+                self.app_config.position.x = self.config_parser.getint('Position', 'x', fallback=0)
+                self.app_config.position.y = self.config_parser.getint('Position', 'y', fallback=0)
+
+            # KeyViewer
+            if self.config_parser.has_section('keyviewer'):
+                kv = self.app_config.key_viewer
+                kv.enabled = self.config_parser.getboolean('keyviewer', 'enabled', fallback=False)
+                kv.layout = self.config_parser.get('keyviewer', 'layout', fallback="horizontal")
+                kv.panel_position = self.config_parser.get('keyviewer', 'panel_position', fallback="below")
+                kv.panel_offset_x = self.config_parser.getint('keyviewer', 'panel_offset_x', fallback=0)
+                kv.panel_offset_y = self.config_parser.getint('keyviewer', 'panel_offset_y', fallback=0)
+                kv.show_counts = self.config_parser.getboolean('keyviewer', 'show_counts', fallback=True)
+                kv.height = self.config_parser.getint('keyviewer', 'height', fallback=60)
+                kv.opacity = self.config_parser.getfloat('keyviewer', 'opacity', fallback=0.2)
+
+            # Lanes
+            if self.config_parser.has_section('lanes'):
+                keys_str = self.config_parser.get('lanes', 'keys', fallback="")
+                if keys_str:
+                    key_list = [k.strip() for k in keys_str.split(',') if k.strip()]
+                    self.app_config.set_lane_keys(key_list)
+        else:
+            # File doesn't exist, save defaults
             self.save()
 
-    def get(self, section, key, default, type_func=str):
-        """Generic getter with type conversion."""
-        if not self.config.has_option(section, key):
-            return default
-        try:
-            val = self.config.get(section, key)
-            return type_func(val)
-        except ValueError:
-            return default
-
-    def set(self, section, key, value):
-        """Generic setter. Does NOT autosave."""
-        if not self.config.has_section(section):
-            self.config.add_section(section)
-        self.config.set(section, key, str(value))
-        
     def save(self):
         """Persist to file and emit signal."""
+        # Visual
+        if not self.config_parser.has_section('Visual'): self.config_parser.add_section('Visual')
+        self.config_parser.set('Visual', 'scroll_speed', str(self.app_config.visual.scroll_speed))
+        self.config_parser.set('Visual', 'bar_color', self.app_config.visual.bar_color_str)
+
+        # Position
+        if not self.config_parser.has_section('Position'): self.config_parser.add_section('Position')
+        self.config_parser.set('Position', 'x', str(self.app_config.position.x))
+        self.config_parser.set('Position', 'y', str(self.app_config.position.y))
+
+        # KeyViewer
+        if not self.config_parser.has_section('keyviewer'): self.config_parser.add_section('keyviewer')
+        kv = self.app_config.key_viewer
+        self.config_parser.set('keyviewer', 'enabled', str(kv.enabled))
+        self.config_parser.set('keyviewer', 'layout', kv.layout)
+        self.config_parser.set('keyviewer', 'panel_position', kv.panel_position)
+        self.config_parser.set('keyviewer', 'panel_offset_x', str(kv.panel_offset_x))
+        self.config_parser.set('keyviewer', 'panel_offset_y', str(kv.panel_offset_y))
+        self.config_parser.set('keyviewer', 'show_counts', str(kv.show_counts))
+        self.config_parser.set('keyviewer', 'height', str(kv.height))
+        self.config_parser.set('keyviewer', 'opacity', str(kv.opacity))
+
+        # Lanes
+        if not self.config_parser.has_section('lanes'): self.config_parser.add_section('lanes')
+        # Reconstruct keys string from lane_map keys sorted by index
+        sorted_keys = sorted(self.app_config.lane_map.items(), key=lambda item: item[1])
+        keys_str = ",".join([k for k, v in sorted_keys])
+        self.config_parser.set('lanes', 'keys', keys_str)
+
         with open(self.filename, 'w') as f:
-            self.config.write(f)
+            self.config_parser.write(f)
+        
         self.settings_changed.emit()
 
-    def _apply_lanes(self):
-        """Reads keys from config and updates Config.LANE_MAP."""
-        if self.config.has_option('lanes', 'keys'):
-            keys_str = self.config.get('lanes', 'keys')
-            key_list = [k.strip() for k in keys_str.split(',') if k.strip()]
-            
-            # Rebuild map
-            Config.LANE_MAP.clear()
-            for idx, k in enumerate(key_list):
-                Config.LANE_MAP[k] = idx
-                
-    def save_lanes(self, key_list):
-        """Saves a list of key strings to config."""
-        keys_str = ",".join(key_list)
-        if not self.config.has_section('lanes'):
-            self.config.add_section('lanes')
-        self.config.set('lanes', 'keys', keys_str)
-        self.save() # Saves to file
-        self._apply_lanes() # Updates runtime config
-        self.settings_changed.emit() # Notify UI/Overlay
-
-    # Properties for easy access
-    @property
-    def scroll_speed(self):
-        return self.get('Visual', 'scroll_speed', Config.SCROLL_SPEED, int)
-    
-    # REMOVED: fall_direction property
-
-    @property
-    def overlay_x(self):
-        return self.get('Position', 'x', 0, int)
-
-    @property
-    def overlay_y(self):
-        return self.get('Position', 'y', 0, int)
-
-    @property
-    def bar_color(self):
-        s = self.get('Visual', 'bar_color', "0,255,255,200", str)
-        try:
-            r, g, b, a = map(int, s.split(','))
-            from PySide6.QtGui import QColor 
-            return QColor(r, g, b, a)
-        except:
-            from PySide6.QtGui import QColor
-            return QColor(0, 255, 255, 200)
-
-    # KeyViewer Properties
-    @property
-    def kv_enabled(self):
-        return self.config.getboolean('keyviewer', 'enabled')
-    @property
-    def kv_layout(self):
-        return self.config.get('keyviewer', 'layout')
-    @property
-    def kv_position(self):
-        return self.config.get('keyviewer', 'panel_position')
-    @property
-    def kv_height(self):
-         return self.get('keyviewer', 'height', 50, int)
-    @property
-    def kv_offset_x(self):
-         return self.get('keyviewer', 'panel_offset_x', 0, int)
-    @property
-    def kv_offset_y(self):
-         return self.get('keyviewer', 'panel_offset_y', 0, int)
-    @property
-    def kv_show_counts(self):
-        return self.config.getboolean('keyviewer', 'show_counts')
-    @property
-    def kv_opacity(self):
-        return self.get('keyviewer', 'opacity', 0.2, float)
+    def update_lanes(self, key_list):
+        self.app_config.set_lane_keys(key_list)
+        self.save()

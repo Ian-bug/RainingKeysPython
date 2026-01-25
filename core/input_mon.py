@@ -1,7 +1,7 @@
 import time
 from PySide6.QtCore import QObject, Signal, QThread
 from pynput import keyboard
-from .config import Config
+from .configuration import AppConfig
 
 class InputWorker(QObject):
     """
@@ -12,8 +12,9 @@ class InputWorker(QObject):
     key_released = Signal(int, float) # lane_index, timestamp
     raw_key_pressed = Signal(str)     # raw_key_string
 
-    def __init__(self):
+    def __init__(self, app_config: AppConfig):
         super().__init__()
+        self.config = app_config
         self.listener = None
         self.running = False
         self.active_keys = set() # Track pressed keys to filter autorepeats
@@ -50,10 +51,10 @@ class InputWorker(QObject):
 
         self.raw_key_pressed.emit(k_str)
 
-        if k_str in Config.LANE_MAP:
+        if k_str in self.config.lane_map:
             self.active_keys.add(k_str)
             timestamp = time.perf_counter()
-            lane_idx = Config.LANE_MAP[k_str]
+            lane_idx = self.config.lane_map[k_str]
             self.key_pressed.emit(lane_idx, timestamp)
 
     def on_release(self, key):
@@ -65,9 +66,9 @@ class InputWorker(QObject):
         if k_str in self.active_keys:
             self.active_keys.remove(k_str)
 
-        if k_str in Config.LANE_MAP:
+        if k_str in self.config.lane_map:
             timestamp = time.perf_counter()
-            lane_idx = Config.LANE_MAP[k_str]
+            lane_idx = self.config.lane_map[k_str]
             self.key_released.emit(lane_idx, timestamp)
 
 class InputMonitor(QThread):
@@ -78,9 +79,9 @@ class InputMonitor(QThread):
     key_released = Signal(int, float)
     raw_key_pressed = Signal(str)
 
-    def __init__(self):
+    def __init__(self, app_config: AppConfig):
         super().__init__()
-        self.worker = InputWorker()
+        self.worker = InputWorker(app_config)
         self.worker.key_pressed.connect(self.key_pressed.emit)
         self.worker.key_released.connect(self.key_released.emit)
         self.worker.raw_key_pressed.connect(self.raw_key_pressed.emit)

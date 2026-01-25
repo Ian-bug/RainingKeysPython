@@ -3,14 +3,13 @@ import time
 from collections import deque
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QRectF
-from PySide6.QtGui import QPainter, QBrush, QColor, QScreen, QFont
-from .config import Config
+from PySide6.QtGui import QPainter, QBrush, QColor, QFont
+from .configuration import AppConfig
 
 # Windows API for click-through
 try:
     import win32gui
     import win32con
-    import win32api
     HAS_WIN32 = True
 except ImportError:
     HAS_WIN32 = False
@@ -69,11 +68,13 @@ class BarPool:
 class RainingKeysOverlay(QWidget):
     def __init__(self, settings_manager):
         super().__init__()
-        self.settings = settings_manager
-        # Connect to settings changed signal
-        self.settings.settings_changed.connect(self.on_settings_changed)
+        self.settings_manager = settings_manager
+        self.config: AppConfig = settings_manager.app_config
         
-        self.pool = BarPool(Config.MAX_BARS)
+        # Connect to settings changed signal
+        self.settings_manager.settings_changed.connect(self.on_settings_changed)
+        
+        self.pool = BarPool(self.config.MAX_BARS)
         self.active_holds = {} # {lane_index: Bar} tracking currently held notes
         
         self.init_ui()
@@ -91,12 +92,19 @@ class RainingKeysOverlay(QWidget):
         # KeyViewer State
         self.key_counts = {} # {lane_index: count}
         # Initialize counts for mapped lanes
-        if Config.LANE_MAP:
-             for idx in Config.LANE_MAP.values():
-                 self.key_counts[idx] = 0
+        self._init_key_counts()
         
         # Track active keys for visual feedback
         self.active_keys_visual = set() # {lane_index}
+        
+        # Cache for geometry
+        self.cached_kv_geom = None
+
+    def _init_key_counts(self):
+        if self.config.lane_map:
+             for idx in self.config.lane_map.values():
+                 if idx not in self.key_counts:
+                     self.key_counts[idx] = 0
 
     def init_ui(self):
         # Window Flags
@@ -108,12 +116,8 @@ class RainingKeysOverlay(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
         
         self.update_layout()
-
-        # Win32 Click-through
 
         # Win32 Click-through
         if HAS_WIN32:
@@ -126,20 +130,30 @@ class RainingKeysOverlay(QWidget):
 
     def on_settings_changed(self):
         # Move window live when settings change
-        self.move(self.settings.overlay_x, self.settings.overlay_y)
+        self.move(self.config.position.x, self.config.position.y)
         self.update_layout() # Recalculate size if lanes changed
+        self._init_key_counts()
+        self.cached_kv_geom = None # Invalidate cache
 
     def update_layout(self):
         """Recalculates window size based on current lanes."""
         max_lane = 0
-        if Config.LANE_MAP:
-             max_lane = max(Config.LANE_MAP.values())
+        if self.config.lane_map:
+             max_lane = max(self.config.lane_map.values())
         else:
              max_lane = 0 # Fallback
         
+        # LANE_START_X is not in config, defining logic here or use visual.lane_width as offset?
+        # Original had LANE_START_X = 50. Let's keep it hardcoded or move to visual settings if needed.
+        # For now, let's assume 50.
+        lane_start_x = 50 
+        
         # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
-        width = Config.LANE_START_X + ((max_lane + 1) * Config.LANE_WIDTH) + 50
-        height = QApplication.primaryScreen().size().height()
+        width = lane_start_x + ((max_lane + 1) * self.config.visual.lane_width) + 50
+        
+        # Get primary screen height
+        screen = QApplication.primaryScreen()
+        height = screen.size().height() if screen else 1080
         
         self.resize(width, height)
 
@@ -172,11 +186,14 @@ class RainingKeysOverlay(QWidget):
 
     def get_kv_geometry(self, screen_h):
         """Calculates KeyViewer position and dimensions."""
-        key_width = Config.LANE_WIDTH 
-        key_height = self.settings.kv_height
+        if self.cached_kv_geom and self.cached_kv_geom['screen_h'] == screen_h:
+             return self.cached_kv_geom
+
+        key_width = self.config.visual.lane_width
+        key_height = self.config.key_viewer.height
         
         # Determine Base Y
-        pos_mode = self.settings.kv_position
+        pos_mode = self.config.key_viewer.panel_position
         base_y = 0
         if pos_mode == 'above':
             base_y = 50 
@@ -185,19 +202,19 @@ class RainingKeysOverlay(QWidget):
         else: # auto
              base_y = screen_h - key_height - 50
 
-        start_y = base_y + self.settings.kv_offset_y
+        start_y = base_y + self.config.key_viewer.panel_offset_y
         
         # Determine Flow Direction based on Position
-        # If KV is at top half -> Flow Down
-        # If KV is at bottom half -> Flow Up
         is_top = (start_y + (key_height/2)) < (screen_h / 2)
         
-        return {
+        self.cached_kv_geom = {
             'y': start_y,
             'height': key_height,
             'width': key_width,
-            'is_top': is_top
+            'is_top': is_top,
+            'screen_h': screen_h
         }
+        return self.cached_kv_geom
 
     def paintEvent(self, event):
         painter = QPainter()
@@ -224,11 +241,11 @@ class RainingKeysOverlay(QWidget):
             self._draw_active_bars(painter, current_time, screen_h, origin_y, direction)
 
             # Draw KeyViewer Panel
-            if self.settings.kv_enabled:
+            if self.config.key_viewer.enabled:
                  self.draw_keyviewer(painter, kv_geom)
 
             # Draw Debug
-            if Config.DEBUG_MODE:
+            if self.config.DEBUG_MODE:
                 self.draw_debug(painter, current_time)
                 
         except Exception as e:
@@ -238,14 +255,77 @@ class RainingKeysOverlay(QWidget):
                 painter.end()
 
     def _draw_active_bars(self, painter, current_time, screen_h, origin_y, direction):
-        speed = self.settings.scroll_speed
+        speed = self.config.visual.scroll_speed
         to_recycle = []
+        
+        bar_width = self.config.visual.bar_width
+        bar_height_min = self.config.visual.bar_height
+        lane_start_x = 50
+        lane_width = self.config.visual.lane_width
+        kv_offset_x = self.config.key_viewer.panel_offset_x
+        bar_color = self.config.visual.bar_color
+        
+        fade_start_y = self.config.FADE_START_Y
+        fade_range = self.config.FADE_RANGE
+        input_latency = self.config.INPUT_LATENCY_OFFSET
 
         # Bar Drawing Loop
         for bar in self.pool.active_bars:
-            should_recycle = self._process_bar(painter, bar, current_time, speed, origin_y, direction, screen_h)
+            # 1. Physics
+            delta_press = current_time - bar.press_time + input_latency
+            dist_head = delta_press * speed
+            
+            if bar.release_time is None:
+                dist_tail = input_latency * speed
+            else:
+                delta_release = current_time - bar.release_time + input_latency
+                dist_tail = delta_release * speed
+
+            # 2. Geometry
+            height_bar = dist_head - dist_tail
+            if height_bar < bar_height_min:
+                    height_bar = bar_height_min
+                    dist_tail = dist_head - height_bar
+            
+            # 3. Screen Position
+            if direction == 1: # Moving Down
+                rect_y = origin_y + dist_tail
+            else: # Moving Up
+                rect_y = origin_y - dist_head
+            
+            # 4. Recycle Check
+            should_recycle = False
+            if direction == 1:
+                if rect_y > screen_h:
+                    should_recycle = True
+            else:
+                    if (rect_y + height_bar) < 0:
+                        should_recycle = True
+
             if should_recycle:
                 to_recycle.append(bar)
+                continue
+
+            # 5. Fade Logic
+            alpha = 1.0
+            if dist_head > fade_start_y:
+                dist_into_fade = dist_head - fade_start_y
+                factor = 1.0 - (dist_into_fade / fade_range)
+                alpha = max(0.0, min(1.0, factor))
+
+            if alpha <= 0.0:
+                continue # Not visible
+                
+            x = lane_start_x + (bar.lane_index * lane_width) + kv_offset_x
+            
+            # Color
+            c = QColor(bar_color)
+            final_alpha = alpha * (bar_color.alphaF()) 
+            c.setAlphaF(final_alpha)
+            
+            painter.setBrush(QBrush(c))
+            painter.setPen(Qt.NoPen)
+            painter.drawRect(QRectF(x, rect_y, bar_width, height_bar))
 
         # Recycle
         for bar in to_recycle:
@@ -255,68 +335,6 @@ class RainingKeysOverlay(QWidget):
             except ValueError:
                 pass
 
-    def _process_bar(self, painter, bar, current_time, speed, origin_y, direction, screen_h):
-        """
-        Calculates bar position, handles fade, draws it.
-        Returns True if the bar should be recycled.
-        """
-        # 1. Physics
-        delta_press = current_time - bar.press_time + Config.INPUT_LATENCY_OFFSET
-        dist_head = delta_press * speed
-        
-        if bar.release_time is None:
-            dist_tail = Config.INPUT_LATENCY_OFFSET * speed
-        else:
-            delta_release = current_time - bar.release_time + Config.INPUT_LATENCY_OFFSET
-            dist_tail = delta_release * speed
-
-        # 2. Geometry
-        height_bar = dist_head - dist_tail
-        if height_bar < Config.BAR_HEIGHT:
-                height_bar = Config.BAR_HEIGHT
-                dist_tail = dist_head - height_bar
-        
-        # 3. Screen Position
-        if direction == 1: # Moving Down
-            rect_y = origin_y + dist_tail
-        else: # Moving Up
-            rect_y = origin_y - dist_head
-        
-        # 4. Recycle Check
-        if direction == 1:
-            if rect_y > screen_h:
-                return True
-        else:
-                if (rect_y + height_bar) < 0:
-                # Top of rect (visually bottom if up?)
-                # If moving up, rect_y is the top edge.
-                # If rect_y + height < 0, it's off top screen
-                    return True
-
-        # 5. Fade Logic
-        alpha = 1.0
-        if dist_head > Config.FADE_START_Y:
-            dist_into_fade = dist_head - Config.FADE_START_Y
-            factor = 1.0 - (dist_into_fade / Config.FADE_RANGE)
-            alpha = max(0.0, min(1.0, factor))
-
-        if alpha <= 0.0:
-            return False # Not visible but maybe not recycled yet (wait for off-screen)
-            
-        x = Config.LANE_START_X + (bar.lane_index * Config.LANE_WIDTH) + self.settings.kv_offset_x
-        
-        # Usage Custom Color
-        base_c = self.settings.bar_color
-        c = QColor(base_c)
-        final_alpha = alpha * (base_c.alphaF()) 
-        c.setAlphaF(final_alpha)
-        
-        painter.setBrush(QBrush(c))
-        painter.setPen(Qt.NoPen)
-        painter.drawRect(QRectF(x, rect_y, Config.BAR_WIDTH, height_bar))
-        
-        return False
-
     def draw_debug(self, painter, current_time):
         self.frame_count += 1
         if current_time - self.last_fps_time >= 1.0:
@@ -324,7 +342,7 @@ class RainingKeysOverlay(QWidget):
             self.frame_count = 0
             self.last_fps_time = current_time
 
-        painter.setPen(Config.COLOR_DEBUG_TEXT)
+        painter.setPen(QColor(0, 255, 0, 255))
         painter.setFont(QFont("Consolas", 10))
         
         active_count = len(self.pool.active_bars)
@@ -334,7 +352,7 @@ class RainingKeysOverlay(QWidget):
             f"FPS: {self.current_fps:.1f}",
             f"Active: {active_count}",
             f"Pool: {pool_size}",
-            f"Speed: {self.settings.scroll_speed}",
+            f"Speed: {self.config.visual.scroll_speed}",
             f"Pos: {self.x()},{self.y()}"
         ]
         
@@ -343,7 +361,7 @@ class RainingKeysOverlay(QWidget):
 
     def draw_keyviewer(self, painter, geom):
         """Renders the KeyViewer panel."""
-        if not Config.LANE_MAP:
+        if not self.config.lane_map:
             return
 
         key_width = geom['width']
@@ -351,13 +369,17 @@ class RainingKeysOverlay(QWidget):
         start_y = geom['y']
         
         # Iterate keys
-        ordered_keys = sorted(Config.LANE_MAP.items(), key=lambda item: item[1])
+        ordered_keys = sorted(self.config.lane_map.items(), key=lambda item: item[1])
         
         painter.setFont(QFont("Arial", 12, QFont.Bold))
-        default_color = self.settings.bar_color
+        default_color = self.config.visual.bar_color
+        
+        lane_start_x = 50
+        lane_width = self.config.visual.lane_width
+        kv_offset_x = self.config.key_viewer.panel_offset_x
         
         for k_str, lane_idx in ordered_keys:
-            kx = Config.LANE_START_X + (lane_idx * Config.LANE_WIDTH) + self.settings.kv_offset_x
+            kx = lane_start_x + (lane_idx * lane_width) + kv_offset_x
             ky = start_y
             
             # Context for rendering a single key
@@ -388,7 +410,7 @@ class RainingKeysOverlay(QWidget):
                     bg_color = bg_color.lighter(120)
         else:
             current_alpha = bg_color.alpha()
-            opacity_factor = self.settings.kv_opacity 
+            opacity_factor = self.config.key_viewer.opacity 
             new_alpha = int(current_alpha * opacity_factor)
             bg_color.setAlpha(new_alpha)
             
@@ -405,7 +427,7 @@ class RainingKeysOverlay(QWidget):
         painter.drawText(k_rect, Qt.AlignCenter, display_text)
         
         # 3. Count
-        if self.settings.kv_show_counts:
+        if self.config.key_viewer.show_counts:
             count_val = self.key_counts.get(lane_idx, 0)
             
             # Position counts based on flow (Always above for now based on logic)
@@ -415,4 +437,3 @@ class RainingKeysOverlay(QWidget):
             painter.setFont(QFont("Arial", 10, QFont.Bold))
             painter.drawText(count_rect, Qt.AlignCenter, str(count_val))
             painter.setFont(QFont("Arial", 12, QFont.Bold))
-
