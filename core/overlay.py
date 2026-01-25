@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QRectF
 from PySide6.QtGui import QPainter, QBrush, QColor, QFont
 from .configuration import AppConfig
+from .ui.theme import COLOR_TEXT_BRIGHT
 
 # Windows API for click-through
 try:
@@ -423,7 +424,7 @@ class RainingKeysOverlay(QWidget):
         if "KEY." in display_text:
                 display_text = display_text.replace("KEY.", "")
         
-        painter.setPen(QColor("white"))
+        painter.setPen(QColor(COLOR_TEXT_BRIGHT))
         painter.drawText(k_rect, Qt.AlignCenter, display_text)
         
         # 3. Count

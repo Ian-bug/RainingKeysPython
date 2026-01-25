@@ -1,7 +1,11 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QComboBox, QGroupBox, QPushButton, QCheckBox, QFrame, QColorDialog
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea
+from PySide6.QtCore import Slot
 from .settings_manager import SettingsManager
+from .ui.components import (
+    PositionSettingsGroup, VisualSettingsGroup, 
+    LaneSettingsGroup, KeyViewerSettingsGroup
+)
+from .ui.theme import DARK_THEME
 
 class SettingsWindow(QWidget):
     def __init__(self, settings_manager: SettingsManager):
@@ -9,7 +13,10 @@ class SettingsWindow(QWidget):
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.setWindowTitle(f"RainingKeys Config v{self.config.VERSION}")
-        self.resize(300, 350)
+        self.resize(340, 500)
+        
+        # Apply Theme
+        self.setStyleSheet(DARK_THEME)
 
         # Recording State
         self.is_recording = False
@@ -18,198 +25,51 @@ class SettingsWindow(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout()
-        
-        # Position Group
-        pos_group = QGroupBox("Overlay Position")
-        pos_layout = QHBoxLayout()
-        
-        self.spin_x = QSpinBox()
-        self.spin_x.setRange(-10000, 10000)
-        self.spin_x.setPrefix("X: ")
-        self.spin_x.setValue(self.config.position.x)
-        self.spin_x.valueChanged.connect(self.on_pos_changed)
-        
-        self.spin_y = QSpinBox()
-        self.spin_y.setRange(-10000, 10000)
-        self.spin_y.setPrefix("Y: ")
-        self.spin_y.setValue(self.config.position.y)
-        self.spin_y.valueChanged.connect(self.on_pos_changed)
-        
-        pos_layout.addWidget(self.spin_x)
-        pos_layout.addWidget(self.spin_y)
-        pos_group.setLayout(pos_layout)
-        layout.addWidget(pos_group)
-        
-        # Visual Group
-        vis_group = QGroupBox("Visual Settings")
-        vis_layout = QVBoxLayout()
-        
-        # Speed
-        speed_layout = QHBoxLayout()
-        speed_layout.addWidget(QLabel("Scroll Speed (px/s):"))
-        self.spin_speed = QSpinBox()
-        self.spin_speed.setRange(100, 5000)
-        self.spin_speed.setSingleStep(50)
-        self.spin_speed.setValue(self.config.visual.scroll_speed)
-        self.spin_speed.valueChanged.connect(self.on_visual_changed)
-        speed_layout.addWidget(self.spin_speed)
-        vis_layout.addLayout(speed_layout)
-        
-        # Custom Color
-        color_layout = QHBoxLayout()
-        color_layout.addWidget(QLabel("Bar Color:"))
-        self.btn_color = QPushButton("Choose Color")
-        self.btn_color.clicked.connect(self.choose_color)
-        self.update_color_btn_style()
-        color_layout.addWidget(self.btn_color)
-        vis_layout.addLayout(color_layout)
-        
-        vis_group.setLayout(vis_layout)
-        layout.addWidget(vis_group)
-        
-        # Lane Configuration Group
-        lane_group = QGroupBox("Lane Configuration")
-        lane_layout = QVBoxLayout()
-        
-        self.lbl_lane_status = QLabel("Current Keys: " + str(len(self.config.lane_map)))
-        self.lbl_lane_status.setWordWrap(True)
-        lane_layout.addWidget(self.lbl_lane_status)
-        
-        self.btn_record = QPushButton("Record Lane Keys")
-        self.btn_record.clicked.connect(self.toggle_recording)
-        lane_layout.addWidget(self.btn_record)
-        
-        self.lbl_instruction = QLabel("Click 'Record', then press keys in order.\nClick 'Stop' when done.")
-        self.lbl_instruction.setStyleSheet("color: gray; font-size: 10px;")
-        lane_layout.addWidget(self.lbl_instruction)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
 
-        lane_group.setLayout(lane_layout)
-        layout.addWidget(lane_group)
-
-        # KeyViewer Configuration Group
-        kv_group = QGroupBox("KeyViewer Panel")
-        kv_layout = QVBoxLayout()
-
-        self.chk_kv_enabled = QCheckBox("Enable KeyViewer")
-        self.chk_kv_enabled.setChecked(self.config.key_viewer.enabled)
-        self.chk_kv_enabled.stateChanged.connect(self.on_kv_changed)
-        kv_layout.addWidget(self.chk_kv_enabled)
-
-        # Layout & Position
-        kv_grid = QHBoxLayout()
-        kv_grid.addWidget(QLabel("Height:"))
-        self.spin_kv_height = QSpinBox()
-        self.spin_kv_height.setRange(10, 500)
-        self.spin_kv_height.setValue(self.config.key_viewer.height)
-        self.spin_kv_height.valueChanged.connect(self.on_kv_changed)
-        kv_grid.addWidget(self.spin_kv_height)
+        # Scroll Area for better usability on small screens
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         
-        kv_grid.addWidget(QLabel("Pos:"))
-        self.combo_kv_pos = QComboBox()
-        self.combo_kv_pos.addItems(["below", "above"])
-        current = self.config.key_viewer.panel_position
-        if current not in ["below", "above"]:
-             current = "below" 
-        self.combo_kv_pos.setCurrentText(current)
-        self.combo_kv_pos.currentTextChanged.connect(self.on_kv_changed)
-        kv_grid.addWidget(self.combo_kv_pos)
-        kv_layout.addLayout(kv_grid)
-
-        # Offsets
-        off_layout = QHBoxLayout()
-        off_layout.addWidget(QLabel("Offset X:"))
-        self.spin_kv_off_x = QSpinBox()
-        self.spin_kv_off_x.setRange(-1000, 1000)
-        self.spin_kv_off_x.setValue(self.config.key_viewer.panel_offset_x)
-        self.spin_kv_off_x.valueChanged.connect(self.on_kv_changed)
-        off_layout.addWidget(self.spin_kv_off_x)
-        off_layout.addWidget(QLabel("Y:"))
-        self.spin_kv_off_y = QSpinBox()
-        self.spin_kv_off_y.setRange(-1000, 1000)
-        self.spin_kv_off_y.setValue(self.config.key_viewer.panel_offset_y)
-        self.spin_kv_off_y.valueChanged.connect(self.on_kv_changed)
-        off_layout.addWidget(self.spin_kv_off_y)
-        kv_layout.addLayout(off_layout)
-
-        # Transparency Control
-        trans_layout = QHBoxLayout()
-        trans_layout.addWidget(QLabel("Inactive Opacity:"))
-        self.spin_kv_opacity = QSpinBox()
-        self.spin_kv_opacity.setRange(0, 100)
-        self.spin_kv_opacity.setSuffix("%")
-        self.spin_kv_opacity.setValue(int(self.config.key_viewer.opacity * 100))
-        self.spin_kv_opacity.valueChanged.connect(self.on_kv_changed)
-        trans_layout.addWidget(self.spin_kv_opacity)
-        kv_layout.addLayout(trans_layout)
-
-        self.chk_kv_counts = QCheckBox("Show Key Counts")
-        self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)
-        self.chk_kv_counts.stateChanged.connect(self.on_kv_changed)
-        kv_layout.addWidget(self.chk_kv_counts)
-
-        kv_group.setLayout(kv_layout)
-        layout.addWidget(kv_group)
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setSpacing(15)
+        
+        # Components
+        self.pos_group = PositionSettingsGroup(self.settings)
+        layout.addWidget(self.pos_group)
+        
+        self.vis_group = VisualSettingsGroup(self.settings)
+        layout.addWidget(self.vis_group)
+        
+        self.lane_group = LaneSettingsGroup(self.settings)
+        self.lane_group.record_toggled.connect(self.on_record_toggled)
+        layout.addWidget(self.lane_group)
+        
+        self.kv_group = KeyViewerSettingsGroup(self.settings)
+        layout.addWidget(self.kv_group)
         
         layout.addStretch()
-        self.setLayout(layout)
-
-    def on_pos_changed(self):
-        self.config.position.x = self.spin_x.value()
-        self.config.position.y = self.spin_y.value()
-        self.settings.save()
         
-    def choose_color(self):
-        current = self.config.visual.bar_color
-        color = QColorDialog.getColor(current, self, "Select Bar Color", QColorDialog.ShowAlphaChannel)
-        if color.isValid():
-            rgba = f"{color.red()},{color.green()},{color.blue()},{color.alpha()}"
-            self.config.visual.bar_color_str = rgba
-            self.settings.save()
-            self.update_color_btn_style()
-            
-    def update_color_btn_style(self):
-        c = self.config.visual.bar_color
-        # Text color contrasting
-        text_col = "black" if c.lightness() > 128 else "white"
-        style = f"background-color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); color: {text_col};"
-        self.btn_color.setStyleSheet(style)
-        self.btn_color.setText(f"RGBA({c.red()},{c.green()},{c.blue()},{c.alpha()})") 
-        
-    def on_visual_changed(self):
-        self.config.visual.scroll_speed = self.spin_speed.value()
-        self.settings.save()
+        scroll.setWidget(content_widget)
+        main_layout.addWidget(scroll)
 
-    def on_kv_changed(self):
-        self.config.key_viewer.enabled = self.chk_kv_enabled.isChecked()
-        self.config.key_viewer.height = self.spin_kv_height.value()
-        self.config.key_viewer.panel_position = self.combo_kv_pos.currentText()
-        self.config.key_viewer.panel_offset_x = self.spin_kv_off_x.value()
-        self.config.key_viewer.panel_offset_y = self.spin_kv_off_y.value()
-        self.config.key_viewer.show_counts = self.chk_kv_counts.isChecked()
-        self.config.key_viewer.opacity = self.spin_kv_opacity.value() / 100.0
-        self.settings.save()
-
-    def toggle_recording(self):
-        if not self.is_recording:
+    def on_record_toggled(self, is_recording):
+        self.is_recording = is_recording
+        if self.is_recording:
             # Start Recording
-            self.is_recording = True
             self.recorded_keys = []
-            self.btn_record.setText("Stop Recording")
-            self.lbl_lane_status.setText("Recording... Press keys!")
-            self.lbl_lane_status.setStyleSheet("color: red; font-weight: bold;")
         else:
             # Stop Recording
-            self.is_recording = False
-            self.btn_record.setText("Record Lane Keys")
-            self.lbl_lane_status.setStyleSheet("")
-            
             if self.recorded_keys:
                 # Save
                 self.settings.update_lanes(self.recorded_keys)
-                self.lbl_lane_status.setText(f"Saved {len(self.recorded_keys)} lane keys.")
+                self.lane_group.update_status(f"Saved {len(self.recorded_keys)} lane keys.")
             else:
-                 self.lbl_lane_status.setText("No keys recorded. Canceled.")
+                self.lane_group.update_status("No keys recorded. Canceled.")
 
     @Slot(str)
     def handle_raw_key(self, key_str):
@@ -218,4 +78,4 @@ class SettingsWindow(QWidget):
             # Avoid duplicates if desired
             if key_str not in self.recorded_keys:
                 self.recorded_keys.append(key_str)
-                self.lbl_lane_status.setText(f"Recorded: {', '.join(self.recorded_keys)}")
+                self.lane_group.update_status(f"Recorded: {', '.join(self.recorded_keys)}")
