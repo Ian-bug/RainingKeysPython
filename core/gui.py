@@ -13,7 +13,7 @@ class SettingsWindow(QWidget):
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.setWindowTitle(f"RainingKeys Config v{self.config.VERSION}")
-        self.resize(340, 500)
+        self.resize(400, 670)
         
         # Apply Theme
         self.setStyleSheet(DARK_THEME)

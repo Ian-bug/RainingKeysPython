@@ -133,10 +133,10 @@ class LaneSettingsGroup(QGroupBox):
         self.lbl_instruction.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self.lbl_instruction)
 
+        self.setLayout(layout)
+
     def update_from_config(self):
         self.update_status("Current Keys: " + str(len(self.config.lane_map)))
-
-        self.setLayout(layout)
 
     def toggle_recording(self):
         self.is_recording = not self.is_recording

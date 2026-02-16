@@ -9,6 +9,7 @@ class VisualSettings:
     bar_width: int = 70
     bar_height: int = 20
     bar_color_str: str = "0,255,255,200"
+    fall_direction: str = "up"
     
     @property
     def bar_color(self) -> QColor:
@@ -25,7 +26,7 @@ class PositionSettings:
 
 @dataclass
 class KeyViewerSettings:
-    enabled: bool = False
+    enabled: bool = True
     layout: str = "horizontal"
     panel_position: str = "below"
     panel_offset_x: int = 0
@@ -47,9 +48,11 @@ class AppConfig:
     FADE_START_Y: int = 800
     FADE_RANGE: int = 200
     DEBUG_MODE: bool = False
-    VERSION: str = "1.3.0"
+    VERSION: str = "1.3.5"
     
-    # Derived properties could go here, but kept simple for now
+    def __post_init__(self):
+        if not self.lane_map:
+            self.lane_map = {'d': 0, 'f': 1, 'j': 2, 'k': 3}
     
     def set_lane_keys(self, keys: List[str]):
         new_map = {}

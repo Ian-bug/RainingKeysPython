@@ -22,6 +22,7 @@ class SettingsManager(QObject):
             if self.config_parser.has_section('Visual'):
                 self.app_config.visual.scroll_speed = self.config_parser.getint('Visual', 'scroll_speed', fallback=800)
                 self.app_config.visual.bar_color_str = self.config_parser.get('Visual', 'bar_color', fallback="0,255,255,200")
+                self.app_config.visual.fall_direction = self.config_parser.get('Visual', 'fall_direction', fallback="up")
 
             # Position
             if self.config_parser.has_section('Position'):
@@ -31,7 +32,7 @@ class SettingsManager(QObject):
             # KeyViewer
             if self.config_parser.has_section('keyviewer'):
                 kv = self.app_config.key_viewer
-                kv.enabled = self.config_parser.getboolean('keyviewer', 'enabled', fallback=False)
+                kv.enabled = self.config_parser.getboolean('keyviewer', 'enabled', fallback=True)
                 kv.layout = self.config_parser.get('keyviewer', 'layout', fallback="horizontal")
                 kv.panel_position = self.config_parser.get('keyviewer', 'panel_position', fallback="below")
                 kv.panel_offset_x = self.config_parser.getint('keyviewer', 'panel_offset_x', fallback=0)
@@ -56,6 +57,7 @@ class SettingsManager(QObject):
         if not self.config_parser.has_section('Visual'): self.config_parser.add_section('Visual')
         self.config_parser.set('Visual', 'scroll_speed', str(self.app_config.visual.scroll_speed))
         self.config_parser.set('Visual', 'bar_color', self.app_config.visual.bar_color_str)
+        self.config_parser.set('Visual', 'fall_direction', self.app_config.visual.fall_direction)
 
         # Position
         if not self.config_parser.has_section('Position'): self.config_parser.add_section('Position')
