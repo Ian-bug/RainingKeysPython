@@ -57,7 +57,7 @@ RainingKeysPython/
 1.  **Prerequisites**: Ensure you have Python 3.10 or newer installed.
 2.  **Clone the repository** (or download source):
     ```bash
-    git clone https://github.com/your-username/RainingKeysPython.git
+    git clone https://github.com/Ian-bug/RainingKeysPython.git
     cd RainingKeysPython
     ```
 3.  **Install dependencies**:
