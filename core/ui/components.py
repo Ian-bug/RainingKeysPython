@@ -1,11 +1,12 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QComboBox, QGroupBox, QPushButton, QCheckBox, QColorDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from ..configuration import AppConfig
 from ..settings_manager import SettingsManager
+from ..qt_utils import signals_blocked
 
 class PositionSettingsGroup(QGroupBox):
     def __init__(self, settings_manager: SettingsManager, parent=None):
@@ -40,12 +41,9 @@ class PositionSettingsGroup(QGroupBox):
         self.settings.save()
 
     def update_from_config(self):
-        self.spin_x.blockSignals(True)
-        self.spin_y.blockSignals(True)
-        self.spin_x.setValue(self.config.position.x)
-        self.spin_y.setValue(self.config.position.y)
-        self.spin_x.blockSignals(False)
-        self.spin_y.blockSignals(False)
+        with signals_blocked(self.spin_x, self.spin_y):
+            self.spin_x.setValue(self.config.position.x)
+            self.spin_y.setValue(self.config.position.y)
 
 class VisualSettingsGroup(QGroupBox):
     def __init__(self, settings_manager: SettingsManager, parent=None):
@@ -102,9 +100,8 @@ class VisualSettingsGroup(QGroupBox):
         self.btn_color.setText(f"RGBA({c.red()},{c.green()},{c.blue()},{c.alpha()})")
 
     def update_from_config(self):
-        self.spin_speed.blockSignals(True)
-        self.spin_speed.setValue(self.config.visual.scroll_speed)
-        self.spin_speed.blockSignals(False)
+        with signals_blocked(self.spin_speed):
+            self.spin_speed.setValue(self.config.visual.scroll_speed)
         self.update_color_btn_style()
 
 class LaneSettingsGroup(QGroupBox):
@@ -235,33 +232,24 @@ class KeyViewerSettingsGroup(QGroupBox):
         self.settings.save()
 
     def update_from_config(self):
-        self.chk_kv_enabled.blockSignals(True)
-        self.chk_kv_enabled.setChecked(self.config.key_viewer.enabled)
-        self.chk_kv_enabled.blockSignals(False)
+        with signals_blocked(
+            self.chk_kv_enabled,
+            self.spin_kv_height,
+            self.combo_kv_pos,
+            self.spin_kv_off_x,
+            self.spin_kv_off_y,
+            self.spin_kv_opacity,
+            self.chk_kv_counts
+        ):
+            self.chk_kv_enabled.setChecked(self.config.key_viewer.enabled)
+            self.spin_kv_height.setValue(self.config.key_viewer.height)
 
-        self.spin_kv_height.blockSignals(True)
-        self.spin_kv_height.setValue(self.config.key_viewer.height)
-        self.spin_kv_height.blockSignals(False)
+            current = self.config.key_viewer.panel_position
+            if current not in ["below", "above"]:
+                current = "below"
+            self.combo_kv_pos.setCurrentText(current)
 
-        self.combo_kv_pos.blockSignals(True)
-        current = self.config.key_viewer.panel_position
-        if current not in ["below", "above"]:
-             current = "below"
-        self.combo_kv_pos.setCurrentText(current)
-        self.combo_kv_pos.blockSignals(False)
-
-        self.spin_kv_off_x.blockSignals(True)
-        self.spin_kv_off_x.setValue(self.config.key_viewer.panel_offset_x)
-        self.spin_kv_off_x.blockSignals(False)
-
-        self.spin_kv_off_y.blockSignals(True)
-        self.spin_kv_off_y.setValue(self.config.key_viewer.panel_offset_y)
-        self.spin_kv_off_y.blockSignals(False)
-
-        self.spin_kv_opacity.blockSignals(True)
-        self.spin_kv_opacity.setValue(int(self.config.key_viewer.opacity * 100))
-        self.spin_kv_opacity.blockSignals(False)
-
-        self.chk_kv_counts.blockSignals(True)
-        self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)
-        self.chk_kv_counts.blockSignals(False)
+            self.spin_kv_off_x.setValue(self.config.key_viewer.panel_offset_x)
+            self.spin_kv_off_y.setValue(self.config.key_viewer.panel_offset_y)
+            self.spin_kv_opacity.setValue(int(self.config.key_viewer.opacity * 100))
+            self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)

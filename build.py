@@ -3,6 +3,16 @@ import os
 import shutil
 import subprocess
 import sys
+import logging
+
+# Setup basic logging for build script
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 from core.settings_manager import SettingsManager
 
 CONFIG_FILES = ['config.ini', 'config.cfg']
@@ -18,13 +28,13 @@ def clean_directories():
     dirs_to_clean = [OUTPUT_DIR, BUILD_DIR]
     for d in dirs_to_clean:
         if os.path.exists(d):
-            print(f"Cleaning {d}...")
+            logger.info(f"Cleaning {d}...")
             shutil.rmtree(d)
 
 def build(debug_mode):
     """Invokes PyInstaller to build the executable."""
-    print(f"Building {EXECUTABLE_NAME} (Debug Mode: {debug_mode})...")
-    
+    logger.info(f"Building {EXECUTABLE_NAME} (Debug Mode: {debug_mode})...")
+
     cmd = [
         'pyinstaller',
         '--onedir',
@@ -41,7 +51,7 @@ def build(debug_mode):
     # Note: We don't explicitly add --add-data here because we copy config manually after build.
     # If hidden imports are needed (e.g. pynput, PySide6), PyInstaller usually finds them.
     # If issues arise, we can add --hidden-import.
-    
+
     # Run PyInstaller
     subprocess.check_call(cmd)
 
@@ -56,42 +66,42 @@ def copy_config_to_dist():
         if os.path.exists(cfg):
             input_config = cfg
             shutil.copy2(input_config, target_dir)
-            print(f"Copied {input_config} to {target_dir}")
+            logger.info(f"Copied {input_config} to {target_dir}")
             copied = True
             break
-    
+
     if not copied:
-        print("Warning: No config file found to copy.")
+        logger.warning("No config file found to copy.")
 
 def create_zip(debug_mode):
     """Packages the dist folder into a zip file."""
     source_dir = os.path.join(OUTPUT_DIR, EXECUTABLE_NAME)
-    
+
     zip_name = EXECUTABLE_NAME
     if debug_mode:
         zip_name += "-debug"
-    
+
     # shutil.make_archive expects the base_name without extension
     # It creates base_name.zip
-    
-    print(f"\nPackaging into {zip_name}.zip...")
-    
+
+    logger.info(f"Packaging into {zip_name}.zip...")
+
     # format='zip': create a zip file
     # root_dir=OUTPUT_DIR: the root directory to archive
     # base_dir=EXECUTABLE_NAME: the directory inside root_dir to start archiving from
     # This prevents the zip from containing 'dist/...' structure, but rather just the executable folder
-    
+
     # We want the zip to contain the top-level folder 'RainingKeysPython'
     # So we archive 'dist' but only the 'RainingKeysPython' subdirectory
-    
+
     shutil.make_archive(zip_name, 'zip', root_dir=OUTPUT_DIR, base_dir=EXECUTABLE_NAME)
-    print(f"Zip created: {zip_name}.zip")
+    logger.info(f"Zip created: {zip_name}.zip")
 
 def update_config_debug_mode(debug_mode):
     """Updates config.ini to match the current build mode."""
     # We read the config to preserve other settings, but force debug_mode
     config = configparser.ConfigParser()
-    
+
     # Manually read to handle potential BOM (Byte Order Mark) issues
     read_success = False
     for cfg in CONFIG_FILES:
@@ -102,8 +112,8 @@ def update_config_debug_mode(debug_mode):
                 read_success = True
                 break
             except Exception as e:
-                print(f"Warning: Could not read {cfg}: {e}")
-    
+                logger.warning(f"Could not read {cfg}: {e}")
+
     # Ensure sections exist
     if not config.has_section('General'):
         if config.has_section('Debug'):
@@ -113,8 +123,8 @@ def update_config_debug_mode(debug_mode):
             config.add_section('General')
             config.set('General', 'debug_mode', str(debug_mode))
     else:
-         config.set('General', 'debug_mode', str(debug_mode))
-    
+        config.set('General', 'debug_mode', str(debug_mode))
+
     # Write back
     # We pick the first available config file to write to, usually config.ini
     target_cfg = CONFIG_FILES[0]
@@ -122,32 +132,32 @@ def update_config_debug_mode(debug_mode):
         config.write(f)
 
 def run_build_cycle(debug_mode):
-    print(f"\n>>> Starting {'DEBUG' if debug_mode else 'RELEASE'} Build Cycle <<<")
-    
+    logger.info(f"\n>>> Starting {'DEBUG' if debug_mode else 'RELEASE'} Build Cycle <<<")
+
     # Reset config to defaults if building for Release
     if not debug_mode:
-        print("Resetting configuration to defaults for Release build...")
+        logger.info("Resetting configuration to defaults for Release build...")
         try:
             settings = SettingsManager()
             settings.reset_to_defaults()
-            print("Configuration reset successful.")
+            logger.info("Configuration reset successful.")
         except Exception as e:
-            print(f"Warning: Failed to reset configuration: {e}")
+            logger.warning(f"Failed to reset configuration: {e}")
 
     # Update config file so the built executable reads the correct mode at runtime
     # AND so that the copy_config_to_dist puts the correct config in the dist folder
     update_config_debug_mode(debug_mode)
-    
+
     # Build
     try:
         build(debug_mode)
     except subprocess.CalledProcessError as e:
-        print(f"Error during build: {e}")
+        logger.error(f"Error during build: {e}")
         sys.exit(1)
-        
+
     # Copy Config
     copy_config_to_dist()
-    
+
     # Zip
     create_zip(debug_mode)
 
@@ -157,25 +167,25 @@ def main():
 
     # 2. Check dependencies
     try:
-        subprocess.call(['pyinstaller', '--version'], stdout=subprocess.DEVNULL)
+        subprocess.call(['pyinstaller', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
-         print("Error: 'pyinstaller' not found. Please install it via 'pip install pyinstaller'.")
-         sys.exit(1)
+        logger.error("'pyinstaller' not found. Please install it via 'pip install pyinstaller'.")
+        sys.exit(1)
 
     # 3. Release Build (Normal)
     run_build_cycle(debug_mode=False)
-    
+
     # 4. Debug Build
     # We clean build/ between runs to ensure clean state, but NOT dist/ (so we keep the zips)
     if os.path.exists(BUILD_DIR):
         shutil.rmtree(BUILD_DIR)
-        
+
     run_build_cycle(debug_mode=True)
 
-    print("\nAll builds complete!")
-    print(f"Artifacts located in project root:")
-    print(f" - {EXECUTABLE_NAME}.zip")
-    print(f" - {EXECUTABLE_NAME}-debug.zip")
+    logger.info("\nAll builds complete!")
+    logger.info(f"Artifacts located in project root:")
+    logger.info(f" - {EXECUTABLE_NAME}.zip")
+    logger.info(f" - {EXECUTABLE_NAME}-debug.zip")
 
 if __name__ == "__main__":
     main()

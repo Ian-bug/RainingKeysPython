@@ -2,22 +2,30 @@ import configparser
 import os
 from PySide6.QtCore import QObject, Signal
 from .configuration import AppConfig
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class SettingsManager(QObject):
-    settings_changed = Signal()
+    settings_changed = Signal()  # Emitted when configuration changes
 
-    def __init__(self, filename="config.ini"):
+    def __init__(self, filename: str = "config.ini") -> None:
         super().__init__()
         self.filename = filename
         self.config_parser = configparser.ConfigParser()
         self.app_config = AppConfig()
         self.load()
 
-    def load(self):
+    def load(self) -> None:
         """Loads configuration from file."""
         if os.path.exists(self.filename):
-            self.config_parser.read(self.filename)
-            
+            try:
+                self.config_parser.read(self.filename)
+            except (configparser.Error, IOError) as e:
+                logger.error(f"Failed to read config file {self.filename}: {e}")
+                logger.info("Using default configuration")
+                return
+
             # Visual
             if self.config_parser.has_section('Visual'):
                 self.app_config.visual.scroll_speed = self.config_parser.getint('Visual', 'scroll_speed', fallback=800)
@@ -47,11 +55,15 @@ class SettingsManager(QObject):
                 if keys_str:
                     key_list = [k.strip() for k in keys_str.split(',') if k.strip()]
                     self.app_config.set_lane_keys(key_list)
+
+            # Validate loaded values
+            self.app_config.position.validate()
+            self.app_config.key_viewer.validate()
         else:
             # File doesn't exist, save defaults
             self.save()
 
-    def save(self):
+    def save(self) -> None:
         """Persist to file and emit signal."""
         # Visual
         if not self.config_parser.has_section('Visual'): self.config_parser.add_section('Visual')
@@ -83,16 +95,27 @@ class SettingsManager(QObject):
         keys_str = ",".join([k for k, v in sorted_keys])
         self.config_parser.set('lanes', 'keys', keys_str)
 
-        with open(self.filename, 'w') as f:
-            self.config_parser.write(f)
-        
+        try:
+            with open(self.filename, 'w', encoding='utf-8') as f:
+                self.config_parser.write(f)
+            logger.debug(f"Configuration saved to {self.filename}")
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to save configuration to {self.filename}: {e}")
+            raise
+
         self.settings_changed.emit()
 
-    def update_lanes(self, key_list):
+    def update_lanes(self, key_list: list[str]) -> None:
+        """Update lane configuration and reset key counters.
+
+        Args:
+            key_list: List of key strings to map to lanes.
+        """
         self.app_config.set_lane_keys(key_list)
         self.save()
+        logger.info(f"Lane configuration updated with {len(key_list)} keys")
 
-    def reset_to_defaults(self):
+    def reset_to_defaults(self) -> None:
         """Resets configuration to default values."""
         default_config = AppConfig()
         

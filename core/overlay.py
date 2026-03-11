@@ -1,11 +1,16 @@
 import sys
 import time
 from collections import deque
+from typing import Dict, Set
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QRectF
-from PySide6.QtGui import QPainter, QBrush, QColor, QFont
+from PySide6.QtGui import QPainter, QBrush, QColor, QFont, QFontDatabase
 from .configuration import AppConfig
+from .settings_manager import SettingsManager
 from .ui.theme import COLOR_TEXT_BRIGHT
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Windows API for click-through
 try:
@@ -14,35 +19,43 @@ try:
     HAS_WIN32 = True
 except ImportError:
     HAS_WIN32 = False
-    print("Warning: pywin32 not found. Click-through might not work.")
+    logger.warning("pywin32 not found. Click-through functionality may not work properly.")
 
 class Bar:
     """Represents a falling visual bar."""
-    __slots__ = ['lane_index', 'press_time', 'release_time', 'active']
-    
-    def __init__(self):
-        self.lane_index = 0
-        self.press_time = 0.0
-        self.release_time = None # None means currently held
-        self.active = False
+    __slots__ = ['lane_index', 'press_time', 'release_time', 'active', 'removed']
+
+    def __init__(self) -> None:
+        self.lane_index: int = 0
+        self.press_time: float = 0.0
+        self.release_time: float | None = None  # None means currently held
+        self.active: bool = False
+        self.removed: bool = False  # Track if this bar was already removed from active_bars
 
 class BarPool:
     """
     Manages a pool of Bar objects. Uses a soft limit approach.
     """
-    def __init__(self, max_size):
+    def __init__(self, max_size: int) -> None:
         self.max_size = max_size
-        self.active_bars = deque()
-        self.inactive_bars = deque()
-        
+        self.active_bars: deque[Bar] = deque()
+        self.inactive_bars: deque[Bar] = deque()
+
         # Pre-allocate some bars
         initial_alloc = min(max_size, 50)
         for _ in range(initial_alloc):
             self.inactive_bars.append(Bar())
 
-    def spawn(self, lane_index, timestamp):
+    def spawn(self, lane_index: int, timestamp: float) -> Bar:
         """
         Activates a bar. If pool is empty/full, handles gracefully.
+
+        Args:
+            lane_index: Which lane this bar belongs to.
+            timestamp: When the key was pressed.
+
+        Returns:
+            The activated Bar object.
         """
         if self.inactive_bars:
             bar = self.inactive_bars.pop()
@@ -52,8 +65,8 @@ class BarPool:
             elif self.active_bars:
                 bar = self.active_bars.popleft()
             else:
-                bar = Bar() 
-        
+                bar = Bar()
+
         bar.active = True
         bar.lane_index = lane_index
         bar.press_time = timestamp
@@ -61,63 +74,68 @@ class BarPool:
         self.active_bars.append(bar)
         return bar
 
-    def recycle(self, bar):
+    def recycle(self, bar: Bar) -> None:
         """Returns a bar to the inactive pool."""
         bar.active = False
+        bar.removed = False  # Reset removed flag for reuse
         self.inactive_bars.append(bar)
 
 class RainingKeysOverlay(QWidget):
-    def __init__(self, settings_manager):
+    def __init__(self, settings_manager: SettingsManager) -> None:
         super().__init__()
         self.settings_manager = settings_manager
         self.config: AppConfig = settings_manager.app_config
-        
+
         # Connect to settings changed signal
         self.settings_manager.settings_changed.connect(self.on_settings_changed)
-        
+
         self.pool = BarPool(self.config.MAX_BARS)
-        self.active_holds = {} # {lane_index: Bar} tracking currently held notes
-        
+        self.active_holds: Dict[int, Bar] = {}  # {lane_index: Bar} tracking currently held notes
+
         self.init_ui()
-        
+
         # High-res timer for rendering
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_canvas)
-        self.timer.start(16) # ~60 FPS target trigger
+        self.timer.start(16)  # ~60 FPS target trigger
 
-        # Debug stats
-        self.last_fps_time = time.perf_counter()
-        self.frame_count = 0
-        self.current_fps = 0.0
+        # Debug stats - only initialized if debug mode is enabled
+        self.last_fps_time: float = 0.0
+        self.frame_count: int = 0
+        self.current_fps: float = 0.0
+        if self.config.DEBUG_MODE:
+            self.last_fps_time = time.perf_counter()
 
         # KeyViewer State
-        self.key_counts = {} # {lane_index: count}
+        self.key_counts: Dict[int, int] = {}  # {lane_index: count}
         # Initialize counts for mapped lanes
         self._init_key_counts()
-        
+
         # Track active keys for visual feedback
-        self.active_keys_visual = set() # {lane_index}
-        
+        self.active_keys_visual: Set[int] = set()  # {lane_index}
+
         # Cache for geometry
-        self.cached_kv_geom = None
+        self.cached_kv_geom: dict | None = None
 
-    def _init_key_counts(self):
+    def _init_key_counts(self) -> None:
+        """Initialize key counters for all mapped lanes."""
         if self.config.lane_map:
-             for idx in self.config.lane_map.values():
-                 if idx not in self.key_counts:
-                     self.key_counts[idx] = 0
+            for idx in self.config.lane_map.values():
+                if idx not in self.key_counts:
+                    self.key_counts[idx] = 0
 
-    def init_ui(self):
+    def init_ui(self) -> None:
+        """Initialize the UI window properties and layout."""
         # Window Flags
         self.setWindowFlags(
-            Qt.FramelessWindowHint | 
-            Qt.WindowStaysOnTopHint | 
-            Qt.Tool | 
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
+            Qt.Tool |
             Qt.WindowTransparentForInput
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        
+
         self.update_layout()
 
         # Win32 Click-through
@@ -127,87 +145,105 @@ class RainingKeysOverlay(QWidget):
                 styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
                 win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT)
             except Exception as e:
-                print(f"Win32 Error: {e}")
+                logger.error(f"Failed to set Win32 click-through: {e}")
 
-    def on_settings_changed(self):
+    def on_settings_changed(self) -> None:
+        """Handle configuration changes by updating UI state."""
         # Move window live when settings change
         self.move(self.config.position.x, self.config.position.y)
-        self.update_layout() # Recalculate size if lanes changed
+        self.update_layout()  # Recalculate size if lanes changed
         self._init_key_counts()
-        self.cached_kv_geom = None # Invalidate cache
+        self._reset_key_counts()  # Reset counters when settings change
+        self.cached_kv_geom = None  # Invalidate cache
 
-    def update_layout(self):
+    def _reset_key_counts(self) -> None:
+        """Reset key counters to prevent unbounded growth."""
+        self.key_counts.clear()
+        self._init_key_counts()
+        logger.debug("Key counters reset")
+
+    def update_layout(self) -> None:
         """Recalculates window size based on current lanes."""
         max_lane = 0
         if self.config.lane_map:
-             max_lane = max(self.config.lane_map.values())
+            max_lane = max(self.config.lane_map.values())
         else:
-             max_lane = 0 # Fallback
-        
-        # LANE_START_X is not in config, defining logic here or use visual.lane_width as offset?
-        # Original had LANE_START_X = 50. Let's keep it hardcoded or move to visual settings if needed.
-        # For now, let's assume 50.
-        lane_start_x = 50 
-        
+            max_lane = 0  # Fallback
+
+        # Use configuration constants instead of magic numbers
+        lane_start_x = self.config.visual.LANE_START_X
+
         # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
-        width = lane_start_x + ((max_lane + 1) * self.config.visual.lane_width) + 50
-        
+        width = lane_start_x + ((max_lane + 1) * self.config.visual.lane_width) + self.config.visual.EXTRA_PADDING
+
         # Get primary screen height
         screen = QApplication.primaryScreen()
-        height = screen.size().height() if screen else 1080
-        
+        if screen:
+            height = screen.size().height()
+        else:
+            height = self.config.visual.FALLBACK_SCREEN_HEIGHT
+            logger.warning(f"Could not detect screen size, using fallback height: {height}")
+
         self.resize(width, height)
 
-    def handle_input(self, lane_index, timestamp):
+    def handle_input(self, lane_index: int, timestamp: float) -> None:
         """Slot called when input monitor detects a key press."""
         if lane_index in self.active_holds:
             pass
         else:
             bar = self.pool.spawn(lane_index, timestamp)
             self.active_holds[lane_index] = bar
-            
+
             # KeyViewer Logic
             self.active_keys_visual.add(lane_index)
             if lane_index not in self.key_counts:
                 self.key_counts[lane_index] = 0
             self.key_counts[lane_index] += 1
 
-    def handle_release(self, lane_index, timestamp):
+    def handle_release(self, lane_index: int, timestamp: float) -> None:
         """Slot called when input monitor detects a key release."""
         if lane_index in self.active_holds:
             bar = self.active_holds.pop(lane_index)
             bar.release_time = timestamp
-        
+
         # KeyViewer Logic
         if lane_index in self.active_keys_visual:
             self.active_keys_visual.remove(lane_index)
 
-    def update_canvas(self):
-        self.update() # Triggers paintEvent
+    def update_canvas(self) -> None:
+        """Trigger a canvas update."""
+        self.update()  # Triggers paintEvent
 
-    def get_kv_geometry(self, screen_h):
-        """Calculates KeyViewer position and dimensions."""
+    def get_kv_geometry(self, screen_h: int) -> dict:
+        """Calculates KeyViewer position and dimensions.
+
+        Args:
+            screen_h: Current screen height in pixels.
+
+        Returns:
+            Dictionary containing KeyViewer geometry information.
+        """
         if self.cached_kv_geom and self.cached_kv_geom['screen_h'] == screen_h:
-             return self.cached_kv_geom
+            return self.cached_kv_geom
 
         key_width = self.config.visual.lane_width
         key_height = self.config.key_viewer.height
-        
-        # Determine Base Y
+
+        # Determine Base Y using configuration constants
         pos_mode = self.config.key_viewer.panel_position
         base_y = 0
         if pos_mode == 'above':
-            base_y = 50 
+            base_y = self.config.visual.KEYVIEWER_OFFSET_Y_TOP
         elif pos_mode == 'below':
-            base_y = screen_h - key_height - 50 
-        else: # auto
-             base_y = screen_h - key_height - 50
+            base_y = screen_h - key_height - self.config.visual.KEYVIEWER_OFFSET_Y_BOTTOM
+        else:  # auto
+            base_y = screen_h - key_height - self.config.visual.KEYVIEWER_OFFSET_Y_BOTTOM
 
         start_y = base_y + self.config.key_viewer.panel_offset_y
-        
+
         # Determine Flow Direction based on Position
-        is_top = (start_y + (key_height/2)) < (screen_h / 2)
-        
+        is_top = (start_y + (key_height / 2)) < (screen_h / 2)
+
         self.cached_kv_geom = {
             'y': start_y,
             'height': key_height,
@@ -217,61 +253,73 @@ class RainingKeysOverlay(QWidget):
         }
         return self.cached_kv_geom
 
-    def paintEvent(self, event):
+    def paintEvent(self, event) -> None:
+        """Main paint event handler - renders the overlay."""
         painter = QPainter()
         try:
             if not painter.begin(self):
                 return
-            
+
             painter.setRenderHint(QPainter.Antialiasing)
 
             current_time = time.perf_counter()
             screen_h = self.height()
-            
+
             # Geometry
-            kv_geom = self.get_kv_geometry(screen_h)       
-            
+            kv_geom = self.get_kv_geometry(screen_h)
+
             # Origin Y determines where bars start
             if kv_geom['is_top']:
                 origin_y = kv_geom['y'] + kv_geom['height']
-                direction = 1 # Down (Positive Y)
+                direction = 1  # Down (Positive Y)
             else:
                 origin_y = kv_geom['y']
-                direction = -1 # Up (Negative Y)
-                
+                direction = -1  # Up (Negative Y)
+
             self._draw_active_bars(painter, current_time, screen_h, origin_y, direction)
 
             # Draw KeyViewer Panel
             if self.config.key_viewer.enabled:
-                 self.draw_keyviewer(painter, kv_geom)
+                self.draw_keyviewer(painter, kv_geom)
 
             # Draw Debug
             if self.config.DEBUG_MODE:
                 self.draw_debug(painter, current_time)
-                
+
         except Exception as e:
-            print(f"Paint Error: {e}")
+            logger.error(f"Paint error: {e}", exc_info=True)
         finally:
             if painter.isActive():
                 painter.end()
 
-    def _draw_active_bars(self, painter, current_time, screen_h, origin_y, direction):
+    def _draw_active_bars(
+        self,
+        painter: QPainter,
+        current_time: float,
+        screen_h: int,
+        origin_y: float,
+        direction: int
+    ) -> None:
         speed = self.config.visual.scroll_speed
         to_recycle = []
-        
+
         bar_width = self.config.visual.bar_width
         bar_height_min = self.config.visual.bar_height
-        lane_start_x = 50
+        lane_start_x = self.config.visual.LANE_START_X
         lane_width = self.config.visual.lane_width
         kv_offset_x = self.config.key_viewer.panel_offset_x
         bar_color = self.config.visual.bar_color
-        
+
         fade_start_y = self.config.FADE_START_Y
         fade_range = self.config.FADE_RANGE
         input_latency = self.config.INPUT_LATENCY_OFFSET
 
         # Bar Drawing Loop
         for bar in self.pool.active_bars:
+            # Skip bars that were already marked for removal
+            if bar.removed:
+                continue
+
             # 1. Physics
             delta_press = current_time - bar.press_time + input_latency
             dist_head = delta_press * speed
@@ -304,6 +352,7 @@ class RainingKeysOverlay(QWidget):
                         should_recycle = True
 
             if should_recycle:
+                bar.removed = True  # Mark as removed before adding to to_recycle
                 to_recycle.append(bar)
                 continue
 
@@ -328,23 +377,33 @@ class RainingKeysOverlay(QWidget):
             painter.setPen(Qt.NoPen)
             painter.drawRect(QRectF(x, rect_y, bar_width, height_bar))
 
-        # Recycle
+        # Recycle - now safe to remove marked bars
         for bar in to_recycle:
             try:
-                self.pool.active_bars.remove(bar)
+                if bar in self.pool.active_bars:
+                    self.pool.active_bars.remove(bar)
                 self.pool.recycle(bar)
             except ValueError:
-                pass
+                # This should never happen now with the removed flag
+                logger.warning("Attempted to remove a bar that was already removed")
 
-    def draw_debug(self, painter, current_time):
+    def draw_debug(self, painter: QPainter, current_time: float) -> None:
+        """Draw debug information overlay.
+
+        Args:
+            painter: QPainter instance for rendering.
+            current_time: Current time from perf_counter.
+        """
         self.frame_count += 1
         if current_time - self.last_fps_time >= 1.0:
             self.current_fps = self.frame_count / (current_time - self.last_fps_time)
             self.frame_count = 0
             self.last_fps_time = current_time
 
+        # Use system monospace font with fallback
+        mono_font = self._get_mono_font(10)
+        painter.setFont(mono_font)
         painter.setPen(QColor(0, 255, 0, 255))
-        painter.setFont(QFont("Consolas", 10))
         
         active_count = len(self.pool.active_bars)
         pool_size = len(self.pool.inactive_bars) + active_count
@@ -360,29 +419,36 @@ class RainingKeysOverlay(QWidget):
         for i, line in enumerate(info):
             painter.drawText(10, 20 + (i * 15), line)
 
-    def draw_keyviewer(self, painter, geom):
-        """Renders the KeyViewer panel."""
+    def draw_keyviewer(self, painter: QPainter, geom: dict) -> None:
+        """Renders the KeyViewer panel.
+
+        Args:
+            painter: QPainter instance for rendering.
+            geom: KeyViewer geometry dictionary from get_kv_geometry.
+        """
         if not self.config.lane_map:
             return
 
         key_width = geom['width']
         key_height = geom['height']
         start_y = geom['y']
-        
+
         # Iterate keys
         ordered_keys = sorted(self.config.lane_map.items(), key=lambda item: item[1])
-        
-        painter.setFont(QFont("Arial", 12, QFont.Bold))
+
+        # Use system sans-serif font with fallback
+        sans_font = self._get_sans_font(12, QFont.Bold)
+        painter.setFont(sans_font)
         default_color = self.config.visual.bar_color
-        
-        lane_start_x = 50
+
+        lane_start_x = self.config.visual.LANE_START_X
         lane_width = self.config.visual.lane_width
         kv_offset_x = self.config.key_viewer.panel_offset_x
-        
+
         for k_str, lane_idx in ordered_keys:
             kx = lane_start_x + (lane_idx * lane_width) + kv_offset_x
             ky = start_y
-            
+
             # Context for rendering a single key
             ctx = {
                 'painter': painter,
@@ -392,29 +458,33 @@ class RainingKeysOverlay(QWidget):
                 'base_color': default_color,
                 'geom': geom
             }
-            
+
             self._draw_key_button(ctx)
 
-    def _draw_key_button(self, ctx):
-        """Draws a single key (bg, text, count) using the provided context."""
+    def _draw_key_button(self, ctx: dict) -> None:
+        """Draws a single key (bg, text, count) using the provided context.
+
+        Args:
+            ctx: Dictionary containing rendering context information.
+        """
         painter = ctx['painter']
         lane_idx = ctx['lane_idx']
         k_rect = ctx['rect']
         base_color = ctx['base_color']
-        
+
         is_pressed = lane_idx in self.active_keys_visual
-        
+
         # 1. Background
-        bg_color = QColor(base_color) 
+        bg_color = QColor(base_color)
         if is_pressed:
-                if bg_color.alpha() > 200:
-                    bg_color = bg_color.lighter(120)
+            if bg_color.alpha() > 200:
+                bg_color = bg_color.lighter(120)
         else:
             current_alpha = bg_color.alpha()
-            opacity_factor = self.config.key_viewer.opacity 
+            opacity_factor = self.config.key_viewer.opacity
             new_alpha = int(current_alpha * opacity_factor)
             bg_color.setAlpha(new_alpha)
-            
+
         painter.setBrush(QBrush(bg_color))
         painter.setPen(Qt.NoPen)
         painter.drawRect(k_rect)
@@ -422,19 +492,76 @@ class RainingKeysOverlay(QWidget):
         # 2. Text
         display_text = ctx['k_str'].replace("'", "").upper()
         if "KEY." in display_text:
-                display_text = display_text.replace("KEY.", "")
-        
+            display_text = display_text.replace("KEY.", "")
+
         painter.setPen(QColor(COLOR_TEXT_BRIGHT))
         painter.drawText(k_rect, Qt.AlignCenter, display_text)
-        
+
         # 3. Count
         if self.config.key_viewer.show_counts:
             count_val = self.key_counts.get(lane_idx, 0)
-            
+
             # Position counts based on flow (Always above for now based on logic)
             # x is k_rect.x(), y is k_rect.y() - 25, width/height same logic
             count_rect = QRectF(k_rect.x(), k_rect.y() - 25, k_rect.width(), 20)
-            
-            painter.setFont(QFont("Arial", 10, QFont.Bold))
+
+            small_font = self._get_sans_font(10, QFont.Bold)
+            painter.setFont(small_font)
             painter.drawText(count_rect, Qt.AlignCenter, str(count_val))
-            painter.setFont(QFont("Arial", 12, QFont.Bold))
+            painter.setFont(self._get_sans_font(12, QFont.Bold))
+
+    def _get_mono_font(self, size: int) -> QFont:
+        """Get a monospace font with cross-platform fallbacks.
+
+        Args:
+            size: Font size in points.
+
+        Returns:
+            QFont instance with monospace font family.
+        """
+        font = QFont()
+        font.setStyleHint(QFont.TypeWriter)
+
+        # Try common monospace fonts in order of preference
+        font_db = QFontDatabase()
+        mono_families = ["Consolas", "Courier New", "Monaco", "Liberation Mono", "monospace"]
+
+        for family in mono_families:
+            if family in font_db.families():
+                font.setFamily(family)
+                font.setPointSize(size)
+                return font
+
+        # Fallback to system default
+        font.setFamily("monospace")
+        font.setPointSize(size)
+        return font
+
+    def _get_sans_font(self, size: int, weight: QFont.Weight = QFont.Normal) -> QFont:
+        """Get a sans-serif font with cross-platform fallbacks.
+
+        Args:
+            size: Font size in points.
+            weight: Font weight (Normal, Bold, etc.).
+
+        Returns:
+            QFont instance with sans-serif font family.
+        """
+        font = QFont()
+        font.setStyleHint(QFont.SansSerif)
+        font.setWeight(weight)
+
+        # Try common sans-serif fonts in order of preference
+        font_db = QFontDatabase()
+        sans_families = ["Segoe UI", "Arial", "Helvetica", "DejaVu Sans", "sans-serif"]
+
+        for family in sans_families:
+            if family in font_db.families():
+                font.setFamily(family)
+                font.setPointSize(size)
+                return font
+
+        # Fallback to system default
+        font.setFamily("sans-serif")
+        font.setPointSize(size)
+        return font
