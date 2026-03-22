@@ -37,8 +37,8 @@ footer = """
 ## [{{ version }}] - Release Notes
 
 ### 📦 Downloads
-- `RainingKeysPython.zip` - Release build (no console)
-- `RainingKeysPython-debug.zip` - Debug build (with console)
+- 'RainingKeysPython.zip' - Release build (no console)
+- 'RainingKeysPython-debug.zip' - Debug build (with console)
 
 ### 📚 Documentation
 - [GitHub Repository](https://github.com/ianaw/RainingKeysPython)
@@ -65,7 +65,7 @@ footer = """
 ## Migration Guide
 
 ### For Users
-No breaking changes in this release. Your \`config.ini\` will continue to work.
+No breaking changes in this release. Your 'config.ini' will continue to work.
 
 ### For Developers
 - Git-cliff now used for changelog generation
