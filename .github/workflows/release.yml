@@ -115,25 +115,23 @@ _Automatically generated using git-cliff_
 
 EOF
 
-            # Append generated changelog (without the header we added)
+            # Append generated changelog (without header we added)
             tail -n +2 CHANGELOG.md >> release_notes.md
 
           echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            RainingKeysPython.zip
-            RainingKeysPython-debug.zip
-            CHANGELOG_${{ steps.version.outputs.version }}.md
-          body_path: ${{ steps.release_notes.outputs.notes_file }}
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
+
+          # Create release using GitHub CLI
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file "$NOTES_FILE" \
+            --repo "$GITHUB_REPOSITORY"
 
       - name: Commit new changelog if generated
         if: steps.changelog_check.outputs.changelog_exists == 'false'
