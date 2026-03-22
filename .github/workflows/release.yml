@@ -71,57 +71,38 @@ jobs:
         if: steps.changelog_check.outputs.changelog_exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-
-          # Generate changelog
-          git-cliff --config cliff.toml --tag "v${VERSION}" --verbose > CHANGELOG.md
+          git-cliff --config cliff.toml --tag "v$VERSION" --verbose > CHANGELOG.md
 
       - name: Format generated changelog
         if: steps.changelog_check.outputs.changelog_exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-
-          # Add version header to generated changelog
           echo "# Changelog - Version $VERSION" > CHANGELOG_temp.md
           echo "" >> CHANGELOG_temp.md
           echo "*This changelog was automatically generated using git-cliff*" >> CHANGELOG_temp.md
           echo "" >> CHANGELOG_temp.md
-
-          # Append generated changelog
           cat CHANGELOG.md >> CHANGELOG_temp.md
-
-          # Replace temp file
           mv CHANGELOG_temp.md CHANGELOG.md
-
-          # Create versioned changelog
           cp CHANGELOG.md "CHANGELOG_${VERSION}.md"
 
       - name: Create release notes
         id: release_notes
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-
           if [ "${{ steps.changelog_check.outputs.changelog_exists }}" = "true" ]; then
             CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
-
-            # Use existing changelog
             echo "### Release $VERSION" > release_notes.md
             echo "" >> release_notes.md
             echo "*Using existing \`$CHANGELOG_FILE\`*" >> release_notes.md
             echo "" >> release_notes.md
-
-            # Add changelog content
             cat "$CHANGELOG_FILE" >> release_notes.md
           else
-            # Use git-cliff generated changelog
             echo "### Release $VERSION" > release_notes.md
             echo "" >> release_notes.md
             echo "*Automatically generated using git-cliff*" >> release_notes.md
             echo "" >> release_notes.md
-
-            # Append generated changelog (without header we added)
             tail -n +2 CHANGELOG.md >> release_notes.md
           fi
-
           echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -130,12 +111,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
-
-          # Create release using GitHub CLI
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
-            --notes-file "$NOTES_FILE" \
-            --repo "$GITHUB_REPOSITORY"
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file "$NOTES_FILE" --repo "$GITHUB_REPOSITORY"
 
       - name: Commit new changelog if generated
         if: steps.changelog_check.outputs.changelog_exists == 'false'
