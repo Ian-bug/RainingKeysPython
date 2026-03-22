@@ -57,14 +57,22 @@ jobs:
             echo "changelog_exists=false" >> $GITHUB_OUTPUT
             echo "No changelog file found, will generate with git-cliff"
 
+      - name: Install git-cliff
+        if: steps.changelog_check.outputs.changelog_exists == 'false'
+        run: |
+          # Install git-cliff
+          wget -qO- https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-linux-amd64.tar.gz
+          tar -xzf git-cliff-linux-amd64.tar.gz
+          sudo mv git-cliff /usr/local/bin/
+          git-cliff --version
+
       - name: Generate changelog with git-cliff
         if: steps.changelog_check.outputs.changelog_exists == 'false'
-        uses: orhun/git-cliff-action@v2
-        with:
-          config: cliff.toml
-          output: CHANGELOG.md
-          tag: ${{ steps.version.outputs.version }}
-          args: --verbose
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Generate changelog
+          git-cliff --config cliff.toml --tag "v${VERSION}" --verbose > CHANGELOG.md
 
       - name: Format generated changelog
         if: steps.changelog_check.outputs.changelog_exists == 'false'
