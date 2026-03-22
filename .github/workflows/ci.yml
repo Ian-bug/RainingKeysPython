@@ -8,7 +8,7 @@ on:
 
 jobs:
   syntax-check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Python Syntax Check
 
     steps:
@@ -29,12 +29,12 @@ jobs:
         run: |
           echo "Checking Python syntax..."
           python -m py_compile main.py
-          find core -name "*.py" -exec python -m py_compile {} \;
-          find core/ui -name "*.py" -exec python -m py_compile {} \;
+          python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core') if f.endswith('.py')]"
+          python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core/ui') if f.endswith('.py')]"
           echo "✅ All files compile successfully"
 
   lint-check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Code Linting
 
     steps:
@@ -60,7 +60,7 @@ jobs:
           echo "✅ No linting errors found"
 
   import-check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Import Validation
 
     steps:
@@ -85,7 +85,7 @@ jobs:
           python -c "import core.logging_config; print('✅ core.logging_config imports successfully')"
 
   type-check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Type Validation
 
     steps:
@@ -129,7 +129,7 @@ jobs:
           "
 
   config-validation:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Configuration Validation
 
     steps:
@@ -202,7 +202,7 @@ jobs:
         shell: cmd
 
   summary:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Quality Summary
     needs: [syntax-check, lint-check, import-check, type-check, config-validation]
 
