@@ -5,6 +5,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 ![CI](https://img.shields.io/github/actions/workflow/status/Ian-bug/RainingKeysPython/Code%20Quality?style=for-the-badge)
 ![Release](https://img.shields.io/github/v/release/Ian-bug/RainingKeysPython?style=for-the-badge)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y01WG0DL)
 
 A high-performance, external rhythm game input visualizer.
 
