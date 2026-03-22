@@ -72,12 +72,10 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
 
           # Add version header to generated changelog
-          cat > CHANGELOG_temp.md << 'EOF'
-# Changelog - Version $VERSION
-
-_This changelog was automatically generated using git-cliff_
-
-EOF
+          echo "# Changelog - Version $VERSION" > CHANGELOG_temp.md
+          echo "" >> CHANGELOG_temp.md
+          echo "*This changelog was automatically generated using git-cliff*" >> CHANGELOG_temp.md
+          echo "" >> CHANGELOG_temp.md
 
           # Append generated changelog
           cat CHANGELOG.md >> CHANGELOG_temp.md
@@ -97,26 +95,23 @@ EOF
             CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
 
             # Use existing changelog
-            cat > release_notes.md << 'EOF'
-### 📦 Release $VERSION
-
-_Using existing \`$CHANGELOG_FILE\`_
-
-EOF
+            echo "### Release $VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "*Using existing \`$CHANGELOG_FILE\`*" >> release_notes.md
+            echo "" >> release_notes.md
 
             # Add changelog content
             cat "$CHANGELOG_FILE" >> release_notes.md
           else
             # Use git-cliff generated changelog
-            cat > release_notes.md << 'EOF'
-### 📦 Release $VERSION
-
-_Automatically generated using git-cliff_
-
-EOF
+            echo "### Release $VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "*Automatically generated using git-cliff*" >> release_notes.md
+            echo "" >> release_notes.md
 
             # Append generated changelog (without header we added)
             tail -n +2 CHANGELOG.md >> release_notes.md
+          fi
 
           echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
 
