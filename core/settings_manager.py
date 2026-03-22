@@ -1,7 +1,6 @@
 import configparser
 import os
 import shutil
-from typing import Optional
 from PySide6.QtCore import QObject, Signal
 from .configuration import AppConfig
 from .logging_config import get_logger

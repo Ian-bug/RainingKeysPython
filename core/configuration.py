@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 from .logging_config import get_logger

@@ -3,9 +3,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QComboBox, QGroupBox, QPushButton, QCheckBox, QColorDialog
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
-from ..configuration import AppConfig
+from PySide6.QtCore import Signal
 from ..settings_manager import SettingsManager
 from ..qt_utils import signals_blocked
 
