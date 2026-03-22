@@ -23,13 +23,23 @@ MAIN_SCRIPT = 'main.py'
 
 
 
-def clean_directories():
-    """Removes build and dist directories."""
+def clean_directories() -> bool:
+    """Removes build and dist directories.
+
+    Returns:
+        True if cleanup succeeded, False if errors occurred.
+    """
     dirs_to_clean = [OUTPUT_DIR, BUILD_DIR]
+    success = True
     for d in dirs_to_clean:
         if os.path.exists(d):
             logger.info(f"Cleaning {d}...")
-            shutil.rmtree(d)
+            try:
+                shutil.rmtree(d)
+            except (IOError, OSError, PermissionError) as e:
+                logger.error(f"Failed to clean {d}: {e}")
+                success = False
+    return success
 
 def build(debug_mode):
     """Invokes PyInstaller to build the executable."""
@@ -97,22 +107,42 @@ def create_zip(debug_mode):
     shutil.make_archive(zip_name, 'zip', root_dir=OUTPUT_DIR, base_dir=EXECUTABLE_NAME)
     logger.info(f"Zip created: {zip_name}.zip")
 
-def update_config_debug_mode(debug_mode):
-    """Updates config.ini to match the current build mode."""
+def update_config_debug_mode(debug_mode: bool) -> bool:
+    """Updates config.ini to match the current build mode.
+
+    Handles multiple encodings gracefully and provides detailed error messages.
+
+    Args:
+        debug_mode: Whether to enable debug mode in config.
+
+    Returns:
+        True if config update succeeded, False otherwise.
+    """
     # We read the config to preserve other settings, but force debug_mode
     config = configparser.ConfigParser()
 
-    # Manually read to handle potential BOM (Byte Order Mark) issues
+    # Try multiple encodings for reading
+    encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
     read_success = False
+
     for cfg in CONFIG_FILES:
         if os.path.exists(cfg):
-            try:
-                with open(cfg, 'r', encoding='utf-8-sig') as f:
-                    config.read_file(f)
-                read_success = True
+            for encoding in encodings:
+                try:
+                    with open(cfg, 'r', encoding=encoding) as f:
+                        config.read_file(f)
+                    logger.info(f"Successfully read {cfg} with encoding {encoding}")
+                    read_success = True
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+                except Exception as e:
+                    logger.warning(f"Failed to read {cfg} with encoding {encoding}: {e}")
+            if read_success:
                 break
-            except Exception as e:
-                logger.warning(f"Could not read {cfg}: {e}")
+
+    if not read_success:
+        logger.warning("Could not read existing config, starting fresh")
 
     # Ensure sections exist
     if not config.has_section('General'):
@@ -125,13 +155,23 @@ def update_config_debug_mode(debug_mode):
     else:
         config.set('General', 'debug_mode', str(debug_mode))
 
-    # Write back
-    # We pick the first available config file to write to, usually config.ini
-    target_cfg = CONFIG_FILES[0]
-    with open(target_cfg, 'w', encoding='utf-8') as f:
-        config.write(f)
+    # Write back with UTF-8
+    try:
+        target_cfg = CONFIG_FILES[0]
+        with open(target_cfg, 'w', encoding='utf-8') as f:
+            config.write(f)
+        logger.debug(f"Updated debug_mode to {debug_mode} in {target_cfg}")
+        return True
+    except (IOError, OSError, PermissionError) as e:
+        logger.error(f"Failed to write config file {target_cfg}: {e}")
+        return False
 
-def run_build_cycle(debug_mode):
+def run_build_cycle(debug_mode: bool) -> None:
+    """Execute a single build cycle (clean, config, build, copy, zip).
+
+    Args:
+        debug_mode: Whether this is a debug build.
+    """
     logger.info(f"\n>>> Starting {'DEBUG' if debug_mode else 'RELEASE'} Build Cycle <<<")
 
     # Reset config to defaults if building for Release
@@ -146,7 +186,8 @@ def run_build_cycle(debug_mode):
 
     # Update config file so the built executable reads the correct mode at runtime
     # AND so that the copy_config_to_dist puts the correct config in the dist folder
-    update_config_debug_mode(debug_mode)
+    if not update_config_debug_mode(debug_mode):
+        logger.error("Failed to update config debug mode, continuing anyway...")
 
     # Build
     try:
@@ -161,7 +202,11 @@ def run_build_cycle(debug_mode):
     # Zip
     create_zip(debug_mode)
 
-def main():
+def main() -> None:
+    """Main build entry point.
+
+    Executes both release and debug builds.
+    """
     # 1. Clean previous builds once at the start
     clean_directories()
 
@@ -178,7 +223,10 @@ def main():
     # 4. Debug Build
     # We clean build/ between runs to ensure clean state, but NOT dist/ (so we keep the zips)
     if os.path.exists(BUILD_DIR):
-        shutil.rmtree(BUILD_DIR)
+        try:
+            shutil.rmtree(BUILD_DIR)
+        except Exception as e:
+            logger.warning(f"Failed to clean build directory: {e}")
 
     run_build_cycle(debug_mode=True)
 

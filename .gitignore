@@ -12,3 +12,8 @@ RELEASE_NOTES.md
 
 # Logs
 *.log
+
+# AI stuffs
+.agents/
+.claude/
+.crush/

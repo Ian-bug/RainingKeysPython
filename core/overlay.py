@@ -1,7 +1,7 @@
 import sys
 import time
 from collections import deque
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QRectF
 from PySide6.QtGui import QPainter, QBrush, QColor, QFont, QFontDatabase
@@ -28,7 +28,7 @@ class Bar:
     def __init__(self) -> None:
         self.lane_index: int = 0
         self.press_time: float = 0.0
-        self.release_time: float | None = None  # None means currently held
+        self.release_time: Optional[float] = None  # None means currently held
         self.active: bool = False
         self.removed: bool = False  # Track if this bar was already removed from active_bars
 
@@ -75,9 +75,21 @@ class BarPool:
         return bar
 
     def recycle(self, bar: Bar) -> None:
-        """Returns a bar to the inactive pool."""
-        bar.active = False
+        """Returns a bar to the inactive pool.
+
+        Args:
+            bar: The Bar object to recycle.
+
+        Raises:
+            ValueError: If the bar is still active.
+        """
+        if bar.active:
+            # This shouldn't happen with proper lifecycle management, but handle gracefully
+            logger.debug(f"Deactivating active bar in lane {bar.lane_index} before recycling")
+            bar.active = False
         bar.removed = False  # Reset removed flag for reuse
+        bar.press_time = 0.0
+        bar.release_time = None
         self.inactive_bars.append(bar)
 
 class RainingKeysOverlay(QWidget):
@@ -94,10 +106,13 @@ class RainingKeysOverlay(QWidget):
 
         self.init_ui()
 
-        # High-res timer for rendering
+        # High-res timer for rendering - use screen refresh rate
+        screen = QApplication.primaryScreen()
+        refresh_rate = screen.refreshRate() if screen else 60.0
+        interval_ms = int(1000.0 / refresh_rate) if refresh_rate > 0 else 16
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_canvas)
-        self.timer.start(16)  # ~60 FPS target trigger
+        self.timer.start(interval_ms)
 
         # Debug stats - only initialized if debug mode is enabled
         self.last_fps_time: float = 0.0
@@ -115,7 +130,13 @@ class RainingKeysOverlay(QWidget):
         self.active_keys_visual: Set[int] = set()  # {lane_index}
 
         # Cache for geometry
-        self.cached_kv_geom: dict | None = None
+        self.cached_kv_geom: Optional[Dict] = None
+
+        # Font cache for performance
+        self._font_cache: Dict[str, QFont] = {}
+
+        # Store last screen height for resize detection
+        self._last_screen_height: int = 0
 
     def _init_key_counts(self) -> None:
         """Initialize key counters for all mapped lanes."""
@@ -123,6 +144,12 @@ class RainingKeysOverlay(QWidget):
             for idx in self.config.lane_map.values():
                 if idx not in self.key_counts:
                     self.key_counts[idx] = 0
+
+        # Clean up old lane indices that no longer exist
+        current_indices = set(self.config.lane_map.values())
+        to_remove = [idx for idx in self.key_counts if idx not in current_indices]
+        for idx in to_remove:
+            del self.key_counts[idx]
 
     def init_ui(self) -> None:
         """Initialize the UI window properties and layout."""
@@ -137,15 +164,27 @@ class RainingKeysOverlay(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
 
         self.update_layout()
+        self._update_win32_clickthrough()
 
-        # Win32 Click-through
-        if HAS_WIN32:
+    def _update_win32_clickthrough(self) -> None:
+        """Update Win32 click-through window handle. Safe to call multiple times."""
+        if not HAS_WIN32:
+            return
+
+        try:
             hwnd = int(self.winId())
-            try:
-                styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-                win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT)
-            except Exception as e:
-                logger.error(f"Failed to set Win32 click-through: {e}")
+            styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT)
+        except Exception as e:
+            logger.error(f"Failed to set Win32 click-through: {e}")
+
+    def resizeEvent(self, event) -> None:
+        """Handle window resize events to invalidate geometry cache."""
+        screen_h = self.height()
+        if screen_h != self._last_screen_height:
+            self.cached_kv_geom = None
+            self._last_screen_height = screen_h
+        super().resizeEvent(event)
 
     def on_settings_changed(self) -> None:
         """Handle configuration changes by updating UI state."""
@@ -155,6 +194,18 @@ class RainingKeysOverlay(QWidget):
         self._init_key_counts()
         self._reset_key_counts()  # Reset counters when settings change
         self.cached_kv_geom = None  # Invalidate cache
+
+        # Clear font cache to prevent stale cached fonts
+        self._font_cache.clear()
+
+        # Reinitialize pool if lane count changed significantly
+        max_lanes = len(self.config.lane_map)
+        required_pool_size = max(self.config.MAX_BARS, max_lanes * 20)
+        if required_pool_size > self.pool.max_size:
+            # Pool is too small for current lanes, recreate
+            self.pool = BarPool(required_pool_size)
+            self.active_holds.clear()
+            logger.info(f"Recreated pool with size {self.pool.max_size} for {max_lanes} lanes")
 
     def _reset_key_counts(self) -> None:
         """Reset key counters to prevent unbounded growth."""
@@ -171,17 +222,17 @@ class RainingKeysOverlay(QWidget):
             max_lane = 0  # Fallback
 
         # Use configuration constants instead of magic numbers
-        lane_start_x = self.config.visual.LANE_START_X
+        lane_start_x = self.config.display.LANE_START_X
 
         # Width: Start Offset + (Max Lane Index + 1) * Lane Width + Extra Padding
-        width = lane_start_x + ((max_lane + 1) * self.config.visual.lane_width) + self.config.visual.EXTRA_PADDING
+        width = lane_start_x + ((max_lane + 1) * self.config.visual.lane_width) + self.config.display.EXTRA_PADDING
 
         # Get primary screen height
         screen = QApplication.primaryScreen()
         if screen:
             height = screen.size().height()
         else:
-            height = self.config.visual.FALLBACK_SCREEN_HEIGHT
+            height = self.config.display.FALLBACK_SCREEN_HEIGHT
             logger.warning(f"Could not detect screen size, using fallback height: {height}")
 
         self.resize(width, height)
@@ -189,7 +240,8 @@ class RainingKeysOverlay(QWidget):
     def handle_input(self, lane_index: int, timestamp: float) -> None:
         """Slot called when input monitor detects a key press."""
         if lane_index in self.active_holds:
-            pass
+            # Duplicate press - log for debugging but don't create new bar
+            logger.debug(f"Ignoring duplicate press on lane {lane_index}")
         else:
             bar = self.pool.spawn(lane_index, timestamp)
             self.active_holds[lane_index] = bar
@@ -205,6 +257,7 @@ class RainingKeysOverlay(QWidget):
         if lane_index in self.active_holds:
             bar = self.active_holds.pop(lane_index)
             bar.release_time = timestamp
+            bar.active = False  # Mark bar as inactive when key is released
 
         # KeyViewer Logic
         if lane_index in self.active_keys_visual:
@@ -233,11 +286,11 @@ class RainingKeysOverlay(QWidget):
         pos_mode = self.config.key_viewer.panel_position
         base_y = 0
         if pos_mode == 'above':
-            base_y = self.config.visual.KEYVIEWER_OFFSET_Y_TOP
+            base_y = self.config.display.KEYVIEWER_OFFSET_Y_TOP
         elif pos_mode == 'below':
-            base_y = screen_h - key_height - self.config.visual.KEYVIEWER_OFFSET_Y_BOTTOM
+            base_y = screen_h - key_height - self.config.display.KEYVIEWER_OFFSET_Y_BOTTOM
         else:  # auto
-            base_y = screen_h - key_height - self.config.visual.KEYVIEWER_OFFSET_Y_BOTTOM
+            base_y = screen_h - key_height - self.config.display.KEYVIEWER_OFFSET_Y_BOTTOM
 
         start_y = base_y + self.config.key_viewer.panel_offset_y
 
@@ -254,7 +307,20 @@ class RainingKeysOverlay(QWidget):
         return self.cached_kv_geom
 
     def paintEvent(self, event) -> None:
-        """Main paint event handler - renders the overlay."""
+        """Main paint event handler - renders the overlay.
+
+        Handles all rendering including:
+        - Falling bars (active notes)
+        - KeyViewer panel
+        - Debug information (when DEBUG_MODE is enabled)
+
+        Expected Failures:
+            - QPainter.begin() may fail if widget is not ready
+            - Windows API calls may fail if window handle is invalid
+            - Font loading may fail for missing fonts
+
+        All rendering errors are caught and logged without crashing.
+        """
         painter = QPainter()
         try:
             if not painter.begin(self):
@@ -305,13 +371,13 @@ class RainingKeysOverlay(QWidget):
 
         bar_width = self.config.visual.bar_width
         bar_height_min = self.config.visual.bar_height
-        lane_start_x = self.config.visual.LANE_START_X
+        lane_start_x = self.config.display.LANE_START_X
         lane_width = self.config.visual.lane_width
         kv_offset_x = self.config.key_viewer.panel_offset_x
         bar_color = self.config.visual.bar_color
 
-        fade_start_y = self.config.FADE_START_Y
-        fade_range = self.config.FADE_RANGE
+        fade_start_y = self.config.display.FADE_START_Y
+        fade_range = self.config.display.FADE_RANGE
         input_latency = self.config.INPUT_LATENCY_OFFSET
 
         # Bar Drawing Loop
@@ -441,7 +507,7 @@ class RainingKeysOverlay(QWidget):
         painter.setFont(sans_font)
         default_color = self.config.visual.bar_color
 
-        lane_start_x = self.config.visual.LANE_START_X
+        lane_start_x = self.config.display.LANE_START_X
         lane_width = self.config.visual.lane_width
         kv_offset_x = self.config.key_viewer.panel_offset_x
 
@@ -511,7 +577,7 @@ class RainingKeysOverlay(QWidget):
             painter.setFont(self._get_sans_font(12, QFont.Bold))
 
     def _get_mono_font(self, size: int) -> QFont:
-        """Get a monospace font with cross-platform fallbacks.
+        """Get a monospace font with cross-platform fallbacks and caching.
 
         Args:
             size: Font size in points.
@@ -519,6 +585,21 @@ class RainingKeysOverlay(QWidget):
         Returns:
             QFont instance with monospace font family.
         """
+        # Validate size to prevent Qt errors
+        if size <= 0:
+            logger.warning(f"Invalid font size {size} requested, using minimum of 1")
+            size = 1
+
+        cache_key = f"mono_{size}"
+        if cache_key in self._font_cache:
+            cached_font = self._font_cache[cache_key]
+            # Validate cached font is still valid
+            if cached_font.pointSize() == size:
+                return cached_font
+            else:
+                # Cache mismatch, remove and recreate
+                del self._font_cache[cache_key]
+
         font = QFont()
         font.setStyleHint(QFont.TypeWriter)
 
@@ -530,15 +611,17 @@ class RainingKeysOverlay(QWidget):
             if family in font_db.families():
                 font.setFamily(family)
                 font.setPointSize(size)
+                self._font_cache[cache_key] = font
                 return font
 
         # Fallback to system default
         font.setFamily("monospace")
         font.setPointSize(size)
+        self._font_cache[cache_key] = font
         return font
 
     def _get_sans_font(self, size: int, weight: QFont.Weight = QFont.Normal) -> QFont:
-        """Get a sans-serif font with cross-platform fallbacks.
+        """Get a sans-serif font with cross-platform fallbacks and caching.
 
         Args:
             size: Font size in points.
@@ -547,6 +630,21 @@ class RainingKeysOverlay(QWidget):
         Returns:
             QFont instance with sans-serif font family.
         """
+        # Validate size to prevent Qt errors
+        if size <= 0:
+            logger.warning(f"Invalid font size {size} requested, using minimum of 1")
+            size = 1
+
+        cache_key = f"sans_{size}_{weight.value}"
+        if cache_key in self._font_cache:
+            cached_font = self._font_cache[cache_key]
+            # Validate cached font is still valid
+            if cached_font.pointSize() == size and cached_font.weight() == weight:
+                return cached_font
+            else:
+                # Cache mismatch, remove and recreate
+                del self._font_cache[cache_key]
+
         font = QFont()
         font.setStyleHint(QFont.SansSerif)
         font.setWeight(weight)
@@ -559,9 +657,11 @@ class RainingKeysOverlay(QWidget):
             if family in font_db.families():
                 font.setFamily(family)
                 font.setPointSize(size)
+                self._font_cache[cache_key] = font
                 return font
 
         # Fallback to system default
         font.setFamily("sans-serif")
         font.setPointSize(size)
+        self._font_cache[cache_key] = font
         return font

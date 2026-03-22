@@ -1,0 +1,153 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.4.0)'
+        required: true
+        type: string
+      use_existing_changelog:
+        description: 'Use existing CHANGELOG_{VERSION}.md file instead of generating one'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    name: Create GitHub Release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract version from tag (e.g., v1.4.0 -> 1.4.0)
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check for existing changelog
+        id: changelog_check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
+
+          if [ "${{ github.event.inputs.use_existing_changelog }}" = "true" ] && [ -f "$CHANGELOG_FILE" ]; then
+            echo "changelog_exists=true" >> $GITHUB_OUTPUT
+            echo "Using existing changelog: $CHANGELOG_FILE"
+          elif [ -f "$CHANGELOG_FILE" ]; then
+            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+            echo "Changelog file exists but use_existing_changelog is false"
+          else
+            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+            echo "No changelog file found, will generate with git-cliff"
+
+      - name: Generate changelog with git-cliff
+        if: steps.changelog_check.outputs.changelog_exists == 'false'
+        uses: orhun/git-cliff-action@v2
+        with:
+          config: cliff.toml
+          output: CHANGELOG.md
+          tag: ${{ steps.version.outputs.version }}
+          args: --verbose
+
+      - name: Format generated changelog
+        if: steps.changelog_check.outputs.changelog_exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Add version header to generated changelog
+          cat > CHANGELOG_temp.md << 'EOF'
+# Changelog - Version $VERSION
+
+_This changelog was automatically generated using git-cliff_
+
+EOF
+
+          # Append generated changelog
+          cat CHANGELOG.md >> CHANGELOG_temp.md
+
+          # Replace temp file
+          mv CHANGELOG_temp.md CHANGELOG.md
+
+          # Create versioned changelog
+          cp CHANGELOG.md "CHANGELOG_${VERSION}.md"
+
+      - name: Create release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if [ "${{ steps.changelog_check.outputs.changelog_exists }}" = "true" ]; then
+            CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
+
+            # Use existing changelog
+            cat > release_notes.md << 'EOF'
+### 📦 Release $VERSION
+
+_Using existing \`$CHANGELOG_FILE\`_
+
+EOF
+
+            # Add changelog content
+            cat "$CHANGELOG_FILE" >> release_notes.md
+          else
+            # Use git-cliff generated changelog
+            cat > release_notes.md << 'EOF'
+### 📦 Release $VERSION
+
+_Automatically generated using git-cliff_
+
+EOF
+
+            # Append generated changelog (without the header we added)
+            tail -n +2 CHANGELOG.md >> release_notes.md
+
+          echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            RainingKeysPython.zip
+            RainingKeysPython-debug.zip
+            CHANGELOG_${{ steps.version.outputs.version }}.md
+          body_path: ${{ steps.release_notes.outputs.notes_file }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit new changelog if generated
+        if: steps.changelog_check.outputs.changelog_exists == 'false'
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: 'chore: Generate changelog for v${{ steps.version.outputs.version }} [skip ci]'
+          add: '.'
+          path: 'CHANGELOG_${{ steps.version.outputs.version }}.md'
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-${{ steps.version.outputs.version }}
+          path: |
+            CHANGELOG_${{ steps.version.outputs.version }}.md
+            CHANGELOG.md
+            release_notes.md

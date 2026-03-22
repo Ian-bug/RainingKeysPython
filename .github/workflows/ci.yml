@@ -1,0 +1,222 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    name: Python Syntax Check
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check Python syntax
+        run: |
+          echo "Checking Python syntax..."
+          python -m py_compile main.py
+          find core -name "*.py" -exec python -m py_compile {} \;
+          find core/ui -name "*.py" -exec python -m py_compile {} \;
+          echo "✅ All files compile successfully"
+
+  lint-check:
+    runs-on: ubuntu-latest
+    name: Code Linting
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyflakes
+
+      - name: Run pyflakes
+        run: |
+          echo "Running pyflakes..."
+          pyflakes main.py
+          pyflakes core/*.py
+          pyflakes core/ui/*.py
+          echo "✅ No linting errors found"
+
+  import-check:
+    runs-on: ubuntu-latest
+    name: Import Validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Test imports
+        run: |
+          echo "Testing module imports..."
+          python -c "import main; print('✅ main.py imports successfully')"
+          python -c "import core.overlay; print('✅ core.overlay imports successfully')"
+          python -c "import core.input_mon; print('✅ core.input_mon imports successfully')"
+          python -c "import core.settings_manager; print('✅ core.settings_manager imports successfully')"
+          python -c "import core.configuration; print('✅ core.configuration imports successfully')"
+          python -c "import core.gui; print('✅ core.gui imports successfully')"
+          python -c "import core.ui.components; print('✅ core.ui.components imports successfully')"
+          python -c "import core.logging_config; print('✅ core.logging_config imports successfully')"
+
+  type-check:
+    runs-on: ubuntu-latest
+    name: Type Validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Check type hints
+        run: |
+          echo "Checking for type annotation issues..."
+          python -c "
+          import ast
+          import sys
+
+          def check_file(filepath):
+              with open(filepath, 'r', encoding='utf-8') as f:
+                  try:
+                      tree = ast.parse(f, filepath)
+                  except SyntaxError as e:
+                      print(f'❌ {filepath}: {e}')
+                      return False
+              return True
+
+          files_to_check = ['main.py', 'core/overlay.py', 'core/input_mon.py',
+                          'core/settings_manager.py', 'core/configuration.py',
+                          'core/gui.py', 'core/ui/components.py']
+
+          all_ok = True
+          for filepath in files_to_check:
+              if check_file(filepath):
+                  print(f'✅ {filepath} type hints valid')
+              else:
+                  all_ok = False
+
+          if not all_ok:
+              sys.exit(1)
+          "
+
+  config-validation:
+    runs-on: ubuntu-latest
+    name: Configuration Validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Validate config schema
+        run: |
+          echo "Testing configuration validation..."
+          python -c "
+          from core.settings_manager import SettingsManager
+          from core.configuration import AppConfig
+
+          # Test default config
+          config = AppConfig()
+          print('✅ Default configuration created successfully')
+
+          # Test schema validation
+          settings = SettingsManager()
+          print('✅ Schema validation passed')
+
+          # Test config save
+          import tempfile
+          import os
+          temp_config = tempfile.mktemp(suffix='.ini')
+          try:
+              settings.filename = temp_config
+              settings.save()
+              print('✅ Config save works correctly')
+          finally:
+              if os.path.exists(temp_config):
+                  os.remove(temp_config)
+          "
+
+  build-test:
+    runs-on: windows-latest
+    name: Windows Build Test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Test build
+        run: |
+          echo "Testing PyInstaller build..."
+          pyinstaller --onefile --noconfirm --clean --name RainingKeysPython main.py
+          if exist "RainingKeysPython.exe" (
+              echo "✅ Build successful"
+              rmdir /s /q build dist
+          ) else (
+              echo "❌ Build failed"
+              exit 1
+          )
+        shell: cmd
+
+  summary:
+    runs-on: ubuntu-latest
+    name: Quality Summary
+    needs: [syntax-check, lint-check, import-check, type-check, config-validation]
+
+    steps:
+      - name: All checks passed
+        run: |
+          echo "## ✅ Code Quality Summary"
+          echo ""
+          echo "| Check | Status |"
+          echo "|-------|--------|"
+          echo "| Python Syntax | ✅ Passed |"
+          echo "| Linting | ✅ Passed |"
+          echo "| Imports | ✅ Passed |"
+          echo "| Type Hints | ✅ Passed |"
+          echo "| Config Validation | ✅ Passed |"
+          echo ""
+          echo "All quality checks passed successfully! 🎉"

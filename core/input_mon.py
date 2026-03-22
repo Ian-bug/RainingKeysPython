@@ -1,4 +1,5 @@
 import time
+from threading import Lock
 from PySide6.QtCore import QObject, Signal, QThread
 from pynput import keyboard
 from .configuration import AppConfig
@@ -13,17 +14,8 @@ class InputWorker(QObject):
 
     Thread Safety:
         The pynput keyboard listener runs in its own thread and calls on_press/on_release
-        callbacks from that thread. The active_keys set is modified from these callbacks.
-
-        While this is not thread-safe in the general Python sense, pynput guarantees that
-        callbacks are invoked serially (not concurrently) from a single background thread.
-        This means there's no actual race condition between the check-and-add operations.
-
-        However, if other code were to access active_keys concurrently, issues could arise.
-        For this application, the design is safe because:
-        1. Only the pynput callback thread modifies active_keys
-        2. All modifications happen through serial callback invocations
-        3. No other thread reads or writes to active_keys
+        callbacks from that thread. The active_keys set is protected by a Lock to ensure
+        thread-safe access, preventing race conditions if other code were to access it.
     """
     key_pressed = Signal(int, float)  # lane_index, timestamp
     key_released = Signal(int, float) # lane_index, timestamp
@@ -35,11 +27,13 @@ class InputWorker(QObject):
         self.listener = None
         self.running = False
         self.active_keys: set[str] = set()  # Track pressed keys to filter autorepeats
+        self._active_keys_lock = Lock()  # Protect active_keys for thread safety
 
     def start_monitoring(self) -> None:
         """Start the keyboard listener in a separate thread."""
         self.running = True
-        self.active_keys.clear()
+        with self._active_keys_lock:
+            self.active_keys.clear()
         self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
         logger.debug("Input monitoring started.")
@@ -50,14 +44,34 @@ class InputWorker(QObject):
         if self.listener:
             self.listener.stop()
             self.listener = None
+            with self._active_keys_lock:
+                self.active_keys.clear()
             logger.debug("Input monitoring stopped.")
 
     def _get_key_str(self, key) -> str:
-        """Convert pynput Key object to string representation."""
+        """Convert pynput Key object to normalized string representation.
+
+        Normalizes key strings to a consistent format:
+        - Character keys: 'a', '1', etc.
+        - Special keys: 'space', 'enter', 'shift', etc.
+        - Function keys: 'f1', 'f2', etc.
+
+        Args:
+            key: pynput Key object.
+
+        Returns:
+            Normalized string representation of the key.
+        """
         try:
+            # Regular character key
             return f"'{key.char}'"
         except AttributeError:
-            return str(key)
+            # Special key
+            key_str = str(key)
+            # Remove 'Key.' prefix for cleaner display
+            if key_str.startswith('Key.'):
+                return key_str.replace('Key.', '').lower()
+            return key_str.lower()
 
     def on_press(self, key) -> None:
         """Handle key press events from pynput listener."""
@@ -67,13 +81,15 @@ class InputWorker(QObject):
         k_str = self._get_key_str(key)
 
         # Filter autorepeat: If key is already in active_keys, ignore it
-        if k_str in self.active_keys:
-            return
+        with self._active_keys_lock:
+            if k_str in self.active_keys:
+                return
 
         self.raw_key_pressed.emit(k_str)
 
         if k_str in self.config.lane_map:
-            self.active_keys.add(k_str)
+            with self._active_keys_lock:
+                self.active_keys.add(k_str)
             timestamp = time.perf_counter()
             lane_idx = self.config.lane_map[k_str]
             self.key_pressed.emit(lane_idx, timestamp)
@@ -85,8 +101,9 @@ class InputWorker(QObject):
 
         k_str = self._get_key_str(key)
 
-        if k_str in self.active_keys:
-            self.active_keys.remove(k_str)
+        with self._active_keys_lock:
+            if k_str in self.active_keys:
+                self.active_keys.remove(k_str)
 
         if k_str in self.config.lane_map:
             timestamp = time.perf_counter()
@@ -113,3 +130,12 @@ class InputMonitor(QThread):
         self.worker.start_monitoring()
         self.exec()
         self.worker.stop_monitoring()
+
+    def stop(self) -> None:
+        """Stop the input monitoring thread cleanly."""
+        self.worker.stop_monitoring()
+        self.quit()
+        if not self.wait(1000):  # Wait up to 1 second for thread to finish
+            logger.warning("InputMonitor thread did not stop gracefully, terminating...")
+            self.terminate()
+            self.wait()

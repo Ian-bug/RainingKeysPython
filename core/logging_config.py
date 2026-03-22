@@ -4,6 +4,7 @@ Centralized logging configuration for RainingKeys.
 Provides a configured logger instance for use throughout the application.
 """
 import logging
+import os
 import sys
 from PySide6.QtCore import QObject, Signal
 
@@ -50,6 +51,15 @@ def setup_logging(debug_mode: bool = False, log_file: str = "rainingkeys.log") -
 
     # File handler for persistent logs
     try:
+        # Ensure log directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            try:
+                os.makedirs(log_dir, exist_ok=True)
+            except (OSError, IOError) as e:
+                logger.warning(f"Could not create log directory {log_dir}: {e}")
+                # Continue without file logging
+
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
         file_formatter = logging.Formatter(
@@ -58,8 +68,9 @@ def setup_logging(debug_mode: bool = False, log_file: str = "rainingkeys.log") -
         )
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
-    except (IOError, OSError) as e:
+    except (IOError, OSError, PermissionError) as e:
         logger.warning(f"Could not create log file {log_file}: {e}")
+        logger.warning("File logging disabled. Only console logging available.")
 
     return logger
 

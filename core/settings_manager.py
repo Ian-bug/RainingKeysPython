@@ -1,5 +1,7 @@
 import configparser
 import os
+import shutil
+from typing import Optional
 from PySide6.QtCore import QObject, Signal
 from .configuration import AppConfig
 from .logging_config import get_logger
@@ -17,7 +19,7 @@ class SettingsManager(QObject):
         self.load()
 
     def load(self) -> None:
-        """Loads configuration from file."""
+        """Loads configuration from file with schema validation and migration."""
         if os.path.exists(self.filename):
             try:
                 self.config_parser.read(self.filename)
@@ -25,6 +27,16 @@ class SettingsManager(QObject):
                 logger.error(f"Failed to read config file {self.filename}: {e}")
                 logger.info("Using default configuration")
                 return
+
+            # Get config version for migration
+            try:
+                config_version = self.config_parser.getint('General', 'config_version', fallback=0)
+            except (configparser.Error, ValueError):
+                config_version = 0
+
+            # Validate config file schema
+            if not self._validate_schema():
+                logger.warning(f"Config file {self.filename} has schema issues, using defaults where invalid")
 
             # Visual
             if self.config_parser.has_section('Visual'):
@@ -56,15 +68,59 @@ class SettingsManager(QObject):
                     key_list = [k.strip() for k in keys_str.split(',') if k.strip()]
                     self.app_config.set_lane_keys(key_list)
 
-            # Validate loaded values
-            self.app_config.position.validate()
-            self.app_config.key_viewer.validate()
+            # Run migrations if needed
+            if config_version < self.app_config.CONFIG_VERSION:
+                self.app_config.migrate_config(config_version)
+                # Save migrated config
+                self.save()
+            else:
+                # Validate loaded values and log if clamped
+                pos_valid = self.app_config.position.validate()
+                kv_valid = self.app_config.key_viewer.validate()
+
+                if not pos_valid or not kv_valid:
+                    logger.warning("Some configuration values were out of range and were clamped. Saving corrected config.")
+                    self.save()  # Save the corrected values
         else:
             # File doesn't exist, save defaults
             self.save()
 
+    def _validate_schema(self) -> bool:
+        """Validate the configuration file schema.
+
+        Returns:
+            True if schema is valid, False if issues found.
+        """
+        is_valid = True
+
+        # Check for required sections
+        required_sections = ['Visual', 'Position', 'keyviewer', 'lanes']
+        for section in required_sections:
+            if not self.config_parser.has_section(section):
+                logger.warning(f"Missing required section: {section}")
+                is_valid = False
+
+        # Check for required keys in each section
+        visual_keys = ['scroll_speed', 'bar_color', 'fall_direction']
+        for key in visual_keys:
+            if self.config_parser.has_section('Visual') and key not in self.config_parser['Visual']:
+                logger.warning(f"Missing required key 'Visual.{key}'")
+                is_valid = False
+
+        return is_valid
+
     def save(self) -> None:
-        """Persist to file and emit signal."""
+        """Persist to file with atomic write for safety.
+
+        Uses a temporary file and atomic rename to prevent corruption.
+        If write fails, the original config file remains intact.
+
+        Raises:
+            IOError: If the file cannot be written.
+        """
+        # Create temporary file for atomic write
+        temp_filename = f"{self.filename}.tmp"
+
         # Visual
         if not self.config_parser.has_section('Visual'): self.config_parser.add_section('Visual')
         self.config_parser.set('Visual', 'scroll_speed', str(self.app_config.visual.scroll_speed))
@@ -95,11 +151,38 @@ class SettingsManager(QObject):
         keys_str = ",".join([k for k, v in sorted_keys])
         self.config_parser.set('lanes', 'keys', keys_str)
 
+        # General (metadata)
+        if not self.config_parser.has_section('General'): self.config_parser.add_section('General')
+        self.config_parser.set('General', 'config_version', str(self.app_config.CONFIG_VERSION))
+
+        # Atomic write: write to temp file first
         try:
-            with open(self.filename, 'w', encoding='utf-8') as f:
+            with open(temp_filename, 'w', encoding='utf-8') as f:
                 self.config_parser.write(f)
+
+            # Atomic rename (works on Unix and Windows)
+            if os.path.exists(self.filename):
+                shutil.copy2(self.filename, f"{self.filename}.bak")  # Backup original
+
+            # On Windows, we need to remove the target first for atomic rename
+            if os.name == 'nt' and os.path.exists(self.filename):
+                os.remove(self.filename)
+
+            os.rename(temp_filename, self.filename)
+
+            # Clean up backup on success
+            if os.path.exists(f"{self.filename}.bak"):
+                os.remove(f"{self.filename}.bak")
+
             logger.debug(f"Configuration saved to {self.filename}")
         except (IOError, OSError) as e:
+            # Clean up temp file on error
+            if os.path.exists(temp_filename):
+                try:
+                    os.remove(temp_filename)
+                except:
+                    pass
+
             logger.error(f"Failed to save configuration to {self.filename}: {e}")
             raise
 

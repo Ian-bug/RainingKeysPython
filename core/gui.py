@@ -1,30 +1,56 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QPushButton
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QTimer
+from typing import List
 from .settings_manager import SettingsManager
 from .ui.components import (
-    PositionSettingsGroup, VisualSettingsGroup, 
+    PositionSettingsGroup, VisualSettingsGroup,
     LaneSettingsGroup, KeyViewerSettingsGroup
 )
 from .ui.theme import DARK_THEME
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class SettingsWindow(QWidget):
-    def __init__(self, settings_manager: SettingsManager):
+    """Configuration window for RainingKeys settings.
+
+    Provides UI for modifying all application settings including:
+    - Overlay position
+    - Visual appearance
+    - Lane configuration
+    - KeyViewer panel settings
+    """
+
+    def __init__(self, settings_manager: SettingsManager) -> None:
+        """Initialize the settings window.
+
+        Args:
+            settings_manager: SettingsManager instance for config persistence.
+        """
         super().__init__()
         self.settings = settings_manager
         self.config = self.settings.app_config
         self.setWindowTitle(f"RainingKeys Config v{self.config.VERSION}")
         self.resize(400, 670)
-        
+
         # Apply Theme
         self.setStyleSheet(DARK_THEME)
 
         # Recording State
         self.is_recording = False
-        self.recorded_keys = []
-        
+        self.recorded_keys: List[str] = []
+
+        # Throttling for UI updates during recording
+        self._update_timer = QTimer()
+        self._update_timer.setSingleShot(True)
+        self._update_timer.setInterval(100)  # Update UI at most 10 times per second
+        self._pending_update_text = ""
+        self._update_timer.timeout.connect(self._do_status_update)
+
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
+        """Initialize the UI components."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
@@ -63,13 +89,20 @@ class SettingsWindow(QWidget):
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
 
-    def on_record_toggled(self, is_recording):
+    def on_record_toggled(self, is_recording: bool) -> None:
+        """Handle recording state changes.
+
+        Args:
+            is_recording: True if recording started, False if stopped.
+        """
         self.is_recording = is_recording
         if self.is_recording:
             # Start Recording
             self.recorded_keys = []
+            self._update_timer.stop()  # Stop any pending updates
         else:
             # Stop Recording
+            self._update_timer.stop()
             if self.recorded_keys:
                 # Save
                 self.settings.update_lanes(self.recorded_keys)
@@ -77,11 +110,24 @@ class SettingsWindow(QWidget):
             else:
                 self.lane_group.update_status("No keys recorded. Canceled.")
 
+    def _do_status_update(self) -> None:
+        """Perform the actual status update (called by throttling timer)."""
+        if self._pending_update_text:
+            self.lane_group.update_status(self._pending_update_text)
+            self._pending_update_text = ""
+
     @Slot(str)
-    def handle_raw_key(self, key_str):
-        """Slot to receive raw keys from InputMonitor."""
+    def handle_raw_key(self, key_str: str) -> None:
+        """Slot to receive raw keys from InputMonitor.
+
+        Args:
+            key_str: String representation of the pressed key.
+        """
         if self.is_recording:
-            # Avoid duplicates if desired
+            # Avoid duplicates
             if key_str not in self.recorded_keys:
                 self.recorded_keys.append(key_str)
-                self.lane_group.update_status(f"Recorded: {', '.join(self.recorded_keys)}")
+                # Throttle UI updates to prevent lag
+                self._pending_update_text = f"Recorded: {', '.join(self.recorded_keys)}"
+                if not self._update_timer.isActive():
+                    self._update_timer.start()

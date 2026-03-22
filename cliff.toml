@@ -1,0 +1,170 @@
+# git-cliff configuration for RainingKeysPython
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+# Changelog header template
+header = """
+# Changelog - {{ version }} [{{ date | date(format='%Y-%m-%d') }}]
+
+{{ range .patches }}
+## [{{ .Commit.Title | replaceRE '(?m)(i18n)?' '' }}] - {{ .Commit.Author.Name }} ({{ .Commit.Author.Email }})
+
+{{ range .commits }}
+### {{ .Commit.Header }}
+
+{{ .Commit.Body }}
+
+{{ end }}
+{{ end }}
+
+"""
+
+# Changelog body template
+body = """
+{{ range .patches }}
+### {{ .Commit.Title | replaceRE '(?m)(i18n)?' '' }}
+
+{{ range .commits }}
+- **{{ .Commit.Header }}**
+  {{ .Commit.Body | upperFirst | replaceRE "\n" " " }}
+{{ end }}
+{{ end }}
+
+"""
+
+# Changelog footer template
+footer = """
+## [{{ version }}] - Release Notes
+
+### 📦 Downloads
+- `RainingKeysPython.zip` - Release build (no console)
+- `RainingKeysPython-debug.zip` - Debug build (with console)
+
+### 📚 Documentation
+- [GitHub Repository](https://github.com/ianaw/RainingKeysPython)
+- [AGENTS.md](https://github.com/ianaw/RainingKeysPython/blob/main/AGENTS.md) - Developer guide
+- [CHANGELOG](https://github.com/ianaw/RainingKeysPython/releases) - Previous releases
+
+### 🐛 Bug Fixes
+- Bar lifecycle management - Fixed cascade of recycling warnings
+- Font size validation - Prevented Qt warnings
+- Thread safety - Added proper locking for key tracking
+
+### ⚡ Performance
+- Font caching - Eliminates repeated QFontDatabase queries
+- Screen refresh rate optimization - Adapts to monitor refresh rate
+- Throttled UI updates - Prevents lag during recording
+
+### 🛠️ Improvements
+- Configuration migration system - Future-proof config format
+- Atomic config writes - Prevents config corruption
+- Dependency checking - Graceful error messages
+
+---
+
+## Migration Guide
+
+### For Users
+No breaking changes in this release. Your \`config.ini\` will continue to work.
+
+### For Developers
+- Git-cliff now used for changelog generation
+- Configuration format version added
+- No API changes
+
+---
+
+## Testing
+
+- All files pass Python syntax validation
+- Code quality checks passing (CI)
+- Windows build tested
+
+---
+
+## Acknowledgments
+
+Special thanks to contributors who made this release possible.
+
+---
+
+**Full Changelog**: See [CHANGELOG_{{ version }}.md](https://github.com/ianaw/RainingKeysPython/blob/main/CHANGELOG_{{ version }}.md)
+"""
+
+# Remove old changelog files (keep last 3 releases)
+trim = true
+# Only show the last 3 releases
+# Default: 0 (show all)
+# Set to: true (trim old entries)
+
+[git]
+# Parse all commits
+conventional_commits = true
+# Detect conventional commits (feat:, fix:, chore:, etc.)
+
+# Parse merge commits
+filter_unconventional = true
+# Treat all commits as conventional (not just feat/fix)
+
+# Split commits by scope
+split_commits = false
+# Don't split by commit scope
+
+# Sort commits by time
+sort = "date"
+# Options: "date", "topo" (chronological)
+
+[git.conventional_commits]
+# Commit types to include
+types = ["feat", "fix", "perf", "refactor", "chore", "test", "docs", "style"]
+# Feature additions, bug fixes, performance, refactoring, maintenance, testing, docs, styling
+
+# Commit types with changelog scope
+scope_enhancement = ["feat"]
+scope_bug = ["fix"]
+scope_performance = ["perf"]
+scope_refactor = ["refactor"]
+scope_breaking = ["BREAKING CHANGE"]
+
+# Default commit type
+default_scope = "misc"
+
+[remote]
+# Remote repository for git operations
+# Note: This is automatically detected by git-cliff
+# Uncomment and set if needed
+# git_remote = "origin"
+
+# Tag prefix
+git_tag_pattern = "v*"
+# Match tags like v1.4.0
+
+# Compare from tag (default: last tag)
+# Uncomment and set for specific behavior
+# from_tag = "v1.3.0"
+# to_tag = "v1.4.0"
+
+[bump]
+# Automatically bump version (set to false if you manage version manually)
+# Not used in our workflow since we create changelog manually
+auto_bump = false
+
+[meta]
+# Metadata for changelog generation
+# These values are available in templates
+
+# Repository name
+# Note: Automatically detected
+# repo_name = "RainingKeysPython"
+
+# Repository URL
+# Note: Automatically detected
+# repo_url = "https://github.com/ianaw/RainingKeysPython"
+
+# Repository owner
+# Note: Automatically detected
+# repo_owner = "ianaw"
+
+# Remote URL
+# Note: Automatically detected
+# remote_url = "https://github.com/ianaw/RainingKeysPython"

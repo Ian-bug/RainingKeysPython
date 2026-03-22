@@ -34,6 +34,54 @@ pyinstaller RainingKeysPython.spec
 pip install -r requirements.txt
 ```
 
+## Configuration File Format
+
+The application uses `config.ini` (also accepts `config.cfg`) for persistent configuration.
+
+### File Sections
+
+#### [Visual]
+```ini
+scroll_speed = 800          # Pixels per second for falling bars
+bar_color = 0,255,255,200  # RGBA color values (R,G,B,A)
+fall_direction = up         # Direction bars fall (up/down)
+```
+
+#### [Position]
+```ini
+x = 0                      # Overlay window X position
+y = 0                      # Overlay window Y position
+```
+
+#### [keyviewer]
+```ini
+enabled = True             # Enable KeyViewer panel
+layout = horizontal        # Layout mode (horizontal/vertical)
+panel_position = below     # Panel position (above/below)
+panel_offset_x = 0         # Horizontal offset
+panel_offset_y = 0         # Vertical offset
+show_counts = True         # Display key press counts
+height = 60                # Panel height in pixels
+opacity = 0.2             # Inactive key opacity (0.0-1.0)
+```
+
+#### [lanes]
+```ini
+keys = 'd','f','j','k'     # Comma-separated key strings mapped to lanes
+```
+
+### Configuration Validation
+
+- Invalid values are automatically clamped to valid ranges
+- Missing sections are created with default values
+- Config file encoding is detected automatically (UTF-8 preferred)
+- Atomic writes prevent corruption on save errors
+
+### Schema Version
+
+Current config version: 1.0
+Migration system handles future format changes automatically.
+
 ## Project Overview
 
 RainingKeysPython is a high-performance, external rhythm game input visualizer built with:
