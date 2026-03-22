@@ -120,14 +120,14 @@ types = ["feat", "fix", "perf", "refactor", "chore", "test", "docs", "style"]
 # Feature additions, bug fixes, performance, refactoring, maintenance, testing, docs, styling
 
 # Commit types with changelog scope
-scope_enhancement = ["feat"]
-scope_bug = ["fix"]
-scope_performance = ["perf"]
-scope_refactor = ["refactor"]
-scope_breaking = ["BREAKING CHANGE"]
+# scope_enhancement = ["feat"]
+# scope_bug = ["fix"]
+# scope_performance = ["perf"]
+# scope_refactor = ["refactor"]
+# scope_breaking = ["BREAKING CHANGE"]
 
 # Default commit type
-default_scope = "misc"
+# default_scope = "misc"
 
 [remote]
 # Remote repository for git operations
