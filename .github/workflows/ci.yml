@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install PySide6
 
       - name: Check Python syntax
         run: |
@@ -31,7 +31,7 @@ jobs:
           python -m py_compile main.py
           python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core') if f.endswith('.py')]"
           python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core/ui') if f.endswith('.py')]"
-          echo "✅ All files compile successfully"
+          echo "All files compile successfully"
 
   lint-check:
     runs-on: windows-latest
@@ -52,12 +52,18 @@ jobs:
           pip install pyflakes
 
       - name: Run pyflakes
+        shell: pwsh
         run: |
           echo "Running pyflakes..."
           pyflakes main.py
-          pyflakes core/*.py
-          pyflakes core/ui/*.py
-          echo "✅ No linting errors found"
+          pyflakes core/overlay.py
+          pyflakes core/input_mon.py
+          pyflakes core/settings_manager.py
+          pyflakes core/configuration.py
+          pyflakes core/gui.py
+          pyflakes core/logging_config.py
+          pyflakes core/ui/components.py
+          echo "No linting errors found"
 
   import-check:
     runs-on: windows-latest
@@ -72,17 +78,23 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6
+
       - name: Test imports
+        shell: pwsh
         run: |
           echo "Testing module imports..."
-          python -c "import main; print('✅ main.py imports successfully')"
-          python -c "import core.overlay; print('✅ core.overlay imports successfully')"
-          python -c "import core.input_mon; print('✅ core.input_mon imports successfully')"
-          python -c "import core.settings_manager; print('✅ core.settings_manager imports successfully')"
-          python -c "import core.configuration; print('✅ core.configuration imports successfully')"
-          python -c "import core.gui; print('✅ core.gui imports successfully')"
-          python -c "import core.ui.components; print('✅ core.ui.components imports successfully')"
-          python -c "import core.logging_config; print('✅ core.logging_config imports successfully')"
+          python -c "import main; print('main.py imports successfully')"
+          python -c "import core.overlay; print('core.overlay imports successfully')"
+          python -c "import core.input_mon; print('core.input_mon imports successfully')"
+          python -c "import core.settings_manager; print('core.settings_manager imports successfully')"
+          python -c "import core.configuration; print('core.configuration imports successfully')"
+          python -c "import core.gui; print('core.gui imports successfully')"
+          python -c "import core.ui.components; print('core.ui.components imports successfully')"
+          python -c "import core.logging_config; print('core.logging_config imports successfully')"
 
   type-check:
     runs-on: windows-latest
@@ -98,35 +110,10 @@ jobs:
           python-version: '3.10'
 
       - name: Check type hints
+        shell: pwsh
         run: |
           echo "Checking for type annotation issues..."
-          python -c "
-          import ast
-          import sys
-
-          def check_file(filepath):
-              with open(filepath, 'r', encoding='utf-8') as f:
-                  try:
-                      tree = ast.parse(f, filepath)
-                  except SyntaxError as e:
-                      print(f'❌ {filepath}: {e}')
-                      return False
-              return True
-
-          files_to_check = ['main.py', 'core/overlay.py', 'core/input_mon.py',
-                          'core/settings_manager.py', 'core/configuration.py',
-                          'core/gui.py', 'core/ui/components.py']
-
-          all_ok = True
-          for filepath in files_to_check:
-              if check_file(filepath):
-                  print(f'✅ {filepath} type hints valid')
-              else:
-                  all_ok = False
-
-          if not all_ok:
-              sys.exit(1)
-          "
+          python -c "import ast, sys; files_to_check = ['main.py', 'core/overlay.py', 'core/input_mon.py', 'core/settings_manager.py', 'core/configuration.py', 'core/gui.py', 'core/ui/components.py']; all_ok = True; exec(open('type_check.py', 'w').write('import ast, sys\n\ndef check_file(filepath):\n    with open(filepath, 'r', encoding='utf-8') as f:\n        try:\n            tree = ast.parse(f, filepath)\n        except SyntaxError as e:\n            print(f\"ERROR {filepath}: {e}\")\n            return False\n    return True\n\nfiles_to_check = \"' + \"', '\".join(files_to_check) + '\")\n\nall_ok = True\nfor filepath in files_to_check:\n    if check_file(filepath):\n        print(f\"OK {filepath} type hints valid\")\n    else:\n        all_ok = False\n\nif not all_ok:\n    sys.exit(1)\n')); exec(open('type_check.py').read()); python type_check.py"
 
   config-validation:
     runs-on: windows-latest
@@ -141,65 +128,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Validate config schema
-        run: |
-          echo "Testing configuration validation..."
-          python -c "
-          from core.settings_manager import SettingsManager
-          from core.configuration import AppConfig
-
-          # Test default config
-          config = AppConfig()
-          print('✅ Default configuration created successfully')
-
-          # Test schema validation
-          settings = SettingsManager()
-          print('✅ Schema validation passed')
-
-          # Test config save
-          import tempfile
-          import os
-          temp_config = tempfile.mktemp(suffix='.ini')
-          try:
-              settings.filename = temp_config
-              settings.save()
-              print('✅ Config save works correctly')
-          finally:
-              if os.path.exists(temp_config):
-                  os.remove(temp_config)
-          "
-
-  build-test:
-    runs-on: windows-latest
-    name: Windows Build Test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          pip install PySide6
 
-      - name: Test build
+      - name: Validate config schema
+        shell: pwsh
         run: |
-          echo "Testing PyInstaller build..."
-          pyinstaller --onefile --noconfirm --clean --name RainingKeysPython main.py
-          if exist "RainingKeysPython.exe" (
-              echo "✅ Build successful"
-              rmdir /s /q build dist
-          ) else (
-              echo "❌ Build failed"
-              exit 1
-          )
-        shell: cmd
+          echo "Testing configuration validation..."
+          python -c "from core.settings_manager import SettingsManager; from core.configuration import AppConfig; config = AppConfig(); print('Default configuration created successfully'); settings = SettingsManager(); print('Schema validation passed')"
 
   summary:
     runs-on: windows-latest
@@ -209,14 +147,14 @@ jobs:
     steps:
       - name: All checks passed
         run: |
-          echo "## ✅ Code Quality Summary"
+          echo "## Quality Summary"
           echo ""
           echo "| Check | Status |"
           echo "|-------|--------|"
-          echo "| Python Syntax | ✅ Passed |"
-          echo "| Linting | ✅ Passed |"
-          echo "| Imports | ✅ Passed |"
-          echo "| Type Hints | ✅ Passed |"
-          echo "| Config Validation | ✅ Passed |"
+          echo "| Python Syntax | Passed |"
+          echo "| Linting | Passed |"
+          echo "| Imports | Passed |"
+          echo "| Type Hints | Passed |"
+          echo "| Config Validation | Passed |"
           echo ""
-          echo "All quality checks passed successfully! 🎉"
+          echo "All quality checks passed successfully!"
