@@ -3,6 +3,9 @@
 import sys
 import os
 
+# Add current directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Suppress Qt warnings for CI
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
@@ -16,11 +19,11 @@ def validate_config():
 
         # Test default config
         config = AppConfig()
-        print("✅ Default configuration created successfully")
+        print("[OK] Default configuration created successfully")
 
         # Test schema validation
         settings = SettingsManager()
-        print("✅ Schema validation passed")
+        print("[OK] Schema validation passed")
 
         # Test config save
         import tempfile
@@ -28,7 +31,7 @@ def validate_config():
         try:
             settings.filename = temp_config
             settings.save()
-            print("✅ Config save works correctly")
+            print("[OK] Config save works correctly")
         finally:
             if os.path.exists(temp_config):
                 os.remove(temp_config)
@@ -37,7 +40,7 @@ def validate_config():
         return True
 
     except Exception as e:
-        print(f"❌ Configuration validation failed: {e}")
+        print(f"[ERROR] Configuration validation failed: {e}")
         import traceback
         traceback.print_exc()
         return False

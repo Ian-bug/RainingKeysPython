@@ -29,9 +29,9 @@ errors = []
 for filepath in files_to_check:
     ok, error = check_file(filepath)
     if ok:
-        print(f"✅ {filepath} - type hints valid")
+        print(f"[OK] {filepath} - type hints valid")
     else:
-        print(f"❌ {filepath} - ERROR: {error}")
+        print(f"[ERROR] {filepath}: {error}")
         errors.append((filepath, error))
         all_ok = False
 

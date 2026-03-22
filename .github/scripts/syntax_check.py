@@ -12,18 +12,18 @@ def check_directory(directory):
                 filepath = os.path.join(root, file)
                 try:
                     py_compile.compile(filepath, doraise=True)
-                    print(f"✅ {filepath} - OK")
+                    print(f"[OK] {filepath}")
                 except py_compile.PyCompileError as e:
-                    print(f"❌ {filepath} - FAILED: {e}")
+                    print(f"[FAILED] {filepath}: {e}")
                     return False
     return True
 
 # Check main.py
 try:
     py_compile.compile('main.py', doraise=True)
-    print("✅ main.py - OK")
+    print("[OK] main.py")
 except py_compile.PyCompileError as e:
-    print(f"❌ main.py - FAILED: {e}")
+    print(f"[FAILED] main.py: {e}")
     sys.exit(1)
 
 # Check core/ directory
