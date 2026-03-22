@@ -42,7 +42,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/RainingKeysPython.exe
+          files: |
+            RainingKeysPython.zip
+            RainingKeysPython-debug.zip
           body_path: CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
