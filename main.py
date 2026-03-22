@@ -33,7 +33,6 @@ def check_dependencies() -> bool:
             f"pip install {' '.join(missing)}"
         )
         try:
-            app = QApplication(sys.argv)
             QMessageBox.critical(None, "Dependency Error", error_msg)
         except Exception:
             print(error_msg)
