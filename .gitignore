@@ -9,3 +9,6 @@ dist/
 *.zip
 RainingKeysPython-debug
 RELEASE_NOTES.md
+
+# Logs
+*.log
