@@ -20,18 +20,8 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PySide6
-
       - name: Check Python syntax
-        run: |
-          echo "Checking Python syntax..."
-          python -m py_compile main.py
-          python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core') if f.endswith('.py')]"
-          python -c "import os, py_compile; [py_compile.compile(os.path.join(dp, f), doraise=True) for dp, dn, files in os.walk('core/ui') if f.endswith('.py')]"
-          echo "All files compile successfully"
+        run: python .github/scripts/syntax_check.py
 
   lint-check:
     runs-on: windows-latest
@@ -111,9 +101,7 @@ jobs:
 
       - name: Check type hints
         shell: pwsh
-        run: |
-          echo "Checking for type annotation issues..."
-          python -c "import ast, sys; files_to_check = ['main.py', 'core/overlay.py', 'core/input_mon.py', 'core/settings_manager.py', 'core/configuration.py', 'core/gui.py', 'core/ui/components.py']; all_ok = True; exec(open('type_check.py', 'w').write('import ast, sys\n\ndef check_file(filepath):\n    with open(filepath, 'r', encoding='utf-8') as f:\n        try:\n            tree = ast.parse(f, filepath)\n        except SyntaxError as e:\n            print(f\"ERROR {filepath}: {e}\")\n            return False\n    return True\n\nfiles_to_check = \"' + \"', '\".join(files_to_check) + '\")\n\nall_ok = True\nfor filepath in files_to_check:\n    if check_file(filepath):\n        print(f\"OK {filepath} type hints valid\")\n    else:\n        all_ok = False\n\nif not all_ok:\n    sys.exit(1)\n')); exec(open('type_check.py').read()); python type_check.py"
+        run: python .github/scripts/type_check.py
 
   config-validation:
     runs-on: windows-latest
@@ -135,9 +123,7 @@ jobs:
 
       - name: Validate config schema
         shell: pwsh
-        run: |
-          echo "Testing configuration validation..."
-          python -c "from core.settings_manager import SettingsManager; from core.configuration import AppConfig; config = AppConfig(); print('Default configuration created successfully'); settings = SettingsManager(); print('Schema validation passed')"
+        run: python .github/scripts/config_validation.py
 
   summary:
     runs-on: windows-latest
