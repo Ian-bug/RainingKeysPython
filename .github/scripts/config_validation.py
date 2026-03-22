@@ -3,8 +3,12 @@
 import sys
 import os
 
-# Add current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Get repository root (2 levels up from this script)
+repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(f"Repository root: {repo_root}")
+
+# Add repository root to Python path
+sys.path.insert(0, repo_root)
 
 # Suppress Qt warnings for CI
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'

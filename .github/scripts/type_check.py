@@ -8,7 +8,8 @@ def check_file(filepath):
     """Check type hints in a Python file."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            ast.parse(f, filepath)
+            source = f.read()
+            ast.parse(source, filepath)
         return True, None
     except SyntaxError as e:
         return False, str(e)
