@@ -30,6 +30,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install git-cliff
+        run: |
+          # Install git-cliff using cargo
+          cargo install git-cliff
+          # Verify installation
+          git-cliff --version
+
       - name: Extract version
         id: version
         run: |
@@ -57,21 +69,12 @@ jobs:
             echo "changelog_exists=false" >> $GITHUB_OUTPUT
             echo "No changelog file found, will generate with git-cliff"
 
-      - name: Install git-cliff
-        if: steps.changelog_check.outputs.changelog_exists == 'false'
-        run: |
-          # Install git-cliff
-          wget -qO- https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-linux-amd64.tar.gz
-          tar -xzf git-cliff-linux-amd64.tar.gz
-          sudo mv git-cliff /usr/local/bin/
-          git-cliff --version
-
       - name: Generate changelog with git-cliff
         if: steps.changelog_check.outputs.changelog_exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          # Generate changelog
+          # Generate changelog using git-cliff
           git-cliff --config cliff.toml --tag "v${VERSION}" --verbose > CHANGELOG.md
 
       - name: Format generated changelog
