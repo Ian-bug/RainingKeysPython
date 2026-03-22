@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     name: Create GitHub Release
 
     steps:
@@ -30,96 +30,105 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install git-cliff
+        shell: pwsh
+        run: |
+          cargo install git-cliff
+          git-cliff --version
+
       - name: Extract version
         id: version
+        shell: pwsh
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Extract version from tag (e.g., v1.4.0 -> 1.4.0)
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+            $env:VERSION = $env:GITHUB_EVENT_INPUTS_VERSION
+          } else {
+            $env:VERSION = $env:GITHUB_REF -replace "refs/tags/v", ""
+          }
+          echo "version=$env:VERSION" >> $env:GITHUB_OUTPUT
 
       - name: Check for existing changelog
         id: changelog_check
+        shell: pwsh
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+          $env:CHANGELOG_FILE = "CHANGELOG_$env:VERSION.md"
 
-          if [ "${{ github.event.inputs.use_existing_changelog }}" = "true" ] && [ -f "$CHANGELOG_FILE" ]; then
-            echo "changelog_exists=true" >> $GITHUB_OUTPUT
-            echo "Using existing changelog: $CHANGELOG_FILE"
-          elif [ -f "$CHANGELOG_FILE" ]; then
-            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+          if ("${{ github.event.inputs.use_existing_changelog }}" -eq "true") -and (Test-Path $env:CHANGELOG_FILE)) {
+            echo "changelog_exists=true" >> $env:GITHUB_OUTPUT
+            echo "Using existing changelog: $env:CHANGELOG_FILE"
+          } elseif (Test-Path $env:CHANGELOG_FILE) {
+            echo "changelog_exists=false" >> $env:GITHUB_OUTPUT
             echo "Changelog file exists but use_existing_changelog is false"
-          else
-            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+          } else {
+            echo "changelog_exists=false" >> $env:GITHUB_OUTPUT
             echo "No changelog file found, will generate with git-cliff"
-
-      - name: Install git-cliff
-        if: steps.changelog_check.outputs.changelog_exists == 'false'
-        run: |
-          # Download and install git-cliff
-          wget -qO- https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-linux-amd64.tar.gz
-          tar -xzf git-cliff-linux-amd64.tar.gz
-          sudo mv git-cliff /usr/local/bin/
-          chmod +x /usr/local/bin/git-cliff
-          git-cliff --version
+          }
 
       - name: Generate changelog with git-cliff
         if: steps.changelog_check.outputs.changelog_exists == 'false'
+        shell: pwsh
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          git-cliff --config cliff.toml --tag "v$VERSION" --verbose > CHANGELOG.md
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+          git-cliff --config cliff.toml --tag "v$env:VERSION" --verbose > CHANGELOG.md
 
       - name: Format generated changelog
         if: steps.changelog_check.outputs.changelog_exists == 'false'
+        shell: pwsh
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "# Changelog - Version $VERSION" > CHANGELOG_temp.md
-          echo "" >> CHANGELOG_temp.md
-          echo "*This changelog was automatically generated using git-cliff*" >> CHANGELOG_temp.md
-          echo "" >> CHANGELOG_temp.md
-          cat CHANGELOG.md >> CHANGELOG_temp.md
-          mv CHANGELOG_temp.md CHANGELOG.md
-          cp CHANGELOG.md "CHANGELOG_${VERSION}.md"
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+          "# Changelog - Version $env:VERSION" | Out-File -Encoding UTF8 CHANGELOG_temp.md
+          "" | Out-File -Encoding UTF8 -Append CHANGELOG_temp.md
+          "*This changelog was automatically generated using git-cliff*" | Out-File -Encoding UTF8 -Append CHANGELOG_temp.md
+          "" | Out-File -Encoding UTF8 -Append CHANGELOG_temp.md
+          Get-Content CHANGELOG.md | Out-File -Encoding UTF8 -Append CHANGELOG_temp.md
+          Move-Item CHANGELOG_temp.md CHANGELOG.md
+          Copy-Item CHANGELOG.md "CHANGELOG_$env:VERSION.md"
 
       - name: Create release notes
         id: release_notes
+        shell: pwsh
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [ "${{ steps.changelog_check.outputs.changelog_exists }}" = "true" ]; then
-            CHANGELOG_FILE="CHANGELOG_${VERSION}.md"
-            echo "### Release $VERSION" > release_notes.md
-            echo "" >> release_notes.md
-            echo "*Using existing \`$CHANGELOG_FILE\`*" >> release_notes.md
-            echo "" >> release_notes.md
-            cat "$CHANGELOG_FILE" >> release_notes.md
-          else
-            echo "### Release $VERSION" > release_notes.md
-            echo "" >> release_notes.md
-            echo "*Automatically generated using git-cliff*" >> release_notes.md
-            echo "" >> release_notes.md
-            tail -n +2 CHANGELOG.md >> release_notes.md
-          fi
-          echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+
+          if ("${{ steps.changelog_check.outputs.changelog_exists }}" -eq "true") {
+            $env:CHANGELOG_FILE = "CHANGELOG_$env:VERSION.md"
+            "### Release $env:VERSION" | Out-File -Encoding UTF8 release_notes.md
+            "" | Out-File -Encoding UTF8 -Append release_notes.md
+            "*Using existing ``$env:CHANGELOG_FILE``*" | Out-File -Encoding UTF8 -Append release_notes.md
+            "" | Out-File -Encoding UTF8 -Append release_notes.md
+            Get-Content $env:CHANGELOG_FILE | Out-File -Encoding UTF8 -Append release_notes.md
+          } else {
+            "### Release $env:VERSION" | Out-File -Encoding UTF8 release_notes.md
+            "" | Out-File -Encoding UTF8 -Append release_notes.md
+            "*Automatically generated using git-cliff*" | Out-File -Encoding UTF8 -Append release_notes.md
+            "" | Out-File -Encoding UTF8 -Append release_notes.md
+            Get-Content CHANGELOG.md | Select-Object -Skip 2 | Out-File -Encoding UTF8 -Append release_notes.md
+          }
+          echo "notes_file=release_notes.md" >> $env:GITHUB_OUTPUT
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
-          gh release create "v$VERSION" --title "v$VERSION" --notes-file "$NOTES_FILE" --repo "$GITHUB_REPOSITORY"
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+          $env:NOTES_FILE = "${{ steps.release_notes.outputs.notes_file }}"
+          gh release create "v$env:VERSION" --title "v$env:VERSION" --notes-file $env:NOTES_FILE --repo $env:GITHUB_REPOSITORY
 
       - name: Commit new changelog if generated
         if: steps.changelog_check.outputs.changelog_exists == 'false'
-        uses: EndBug/add-and-commit@v9
-        with:
-          message: 'chore: Generate changelog for v${{ steps.version.outputs.version }} [skip ci]'
-          add: '.'
-          path: 'CHANGELOG_${{ steps.version.outputs.version }}.md'
+        shell: pwsh
+        run: |
+          $env:VERSION = "${{ steps.version.outputs.version }}"
+          git add "CHANGELOG_$env:VERSION.md"
+          git commit -m "chore: Generate changelog for v$env:VERSION [skip ci]"
+          git push
 
       - name: Upload changelog artifact
         uses: actions/upload-artifact@v4
