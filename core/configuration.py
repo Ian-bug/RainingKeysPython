@@ -168,7 +168,7 @@ class AppConfig:
     MAX_BARS: int = 300
     INPUT_LATENCY_OFFSET: float = 0.0
     DEBUG_MODE: bool = False
-    VERSION: str = "1.3.9"
+    VERSION: str = "1.3.10"
     CONFIG_VERSION: int = 1  # Config schema version for migrations
     display: DisplayConstants = field(default_factory=DisplayConstants)
     

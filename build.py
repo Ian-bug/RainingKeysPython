@@ -51,6 +51,7 @@ def build(debug_mode):
         '--noconfirm',
         '--clean',
         '--name', EXECUTABLE_NAME,
+        '--icon', 'extension_icon@1024px.png',
         MAIN_SCRIPT
     ]
 

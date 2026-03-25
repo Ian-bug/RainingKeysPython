@@ -1,4 +1,9 @@
+<div align="center">
+
 # RainingKeys (Python)
+
+  <img src="extension_icon.png" alt="RainingKeysPython Icon" width="128">
+
 
 ![License](https://img.shields.io/github/license/Ian-bug/RainingKeysPython?style=for-the-badge)
 ![Python](https://img.shields.io/badge/python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white)
@@ -7,7 +12,9 @@
 ![Release](https://img.shields.io/github/v/release/Ian-bug/RainingKeysPython?style=for-the-badge)
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y01WG0DL)
 
-A high-performance, external rhythm game input visualizer.
+**A high-performance, external rhythm game input visualizer.**
+
+</div>
 
 RainingKeys is a purely external overlay application that visualizes keyboard inputs as falling bars, similar to "Rain" mode found in various rhythm game mods. It provides visual feedback on rhythm stability, micro-jitter, and input timing without injecting code into game process.
 
