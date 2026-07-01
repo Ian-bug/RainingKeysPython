@@ -375,8 +375,9 @@ class RainingKeysOverlay(QWidget):
         kv_offset_x = self.config.key_viewer.panel_offset_x
         bar_color = self.config.visual.bar_color
 
-        fade_start_y = self.config.display.FADE_START_Y
-        fade_range = self.config.display.FADE_RANGE
+        fade_position_y = self.config.key_viewer.fade_position_y
+        fade_length_y = self.config.key_viewer.fade_length_y
+        fade_trigger = self.config.key_viewer.fade_trigger
         input_latency = self.config.INPUT_LATENCY_OFFSET
 
         # Bar Drawing Loop
@@ -422,10 +423,12 @@ class RainingKeysOverlay(QWidget):
                 continue
 
             # 5. Fade Logic
+            trigger_dist = dist_head if fade_trigger == "head" else dist_tail
+
             alpha = 1.0
-            if dist_head > fade_start_y:
-                dist_into_fade = dist_head - fade_start_y
-                factor = 1.0 - (dist_into_fade / fade_range)
+            if trigger_dist > fade_position_y:
+                dist_into_fade = trigger_dist - fade_position_y
+                factor = 1.0 - (dist_into_fade / fade_length_y)
                 alpha = max(0.0, min(1.0, factor))
 
             if alpha <= 0.0:

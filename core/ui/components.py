@@ -1,6 +1,6 @@
 from typing import Optional
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QComboBox, QGroupBox, QPushButton, QCheckBox, QColorDialog
 )
 from PySide6.QtCore import Signal
@@ -281,6 +281,44 @@ class KeyViewerSettingsGroup(QGroupBox):
         self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)
         self.chk_kv_counts.stateChanged.connect(self.on_change)
         layout.addWidget(self.chk_kv_counts)
+        
+        # Attempt to get maximum screen height from all connected screens
+        try:
+            screens = QApplication.screens()
+            if screens:
+                max_screen_y = max(screen.size().height() for screen in screens)
+            else: 
+                max_screen_y = 5000 
+        except Exception:
+            max_screen_y = 5000
+        
+        # Fade Controls
+        fade_layout = QHBoxLayout()
+        fade_layout.addWidget(QLabel("Fade Y:"))
+        self.spin_kv_fade_pos = QSpinBox()
+        self.spin_kv_fade_pos.setRange(0, max_screen_y)
+        self.spin_kv_fade_pos.setValue(self.config.key_viewer.fade_position_y)
+        self.spin_kv_fade_pos.valueChanged.connect(self.on_change)
+        fade_layout.addWidget(self.spin_kv_fade_pos)
+
+        fade_layout.addWidget(QLabel("Length:"))
+        self.spin_kv_fade_len = QSpinBox()
+        self.spin_kv_fade_len.setRange(10, max_screen_y)
+        self.spin_kv_fade_len.setValue(self.config.key_viewer.fade_length_y)
+        self.spin_kv_fade_len.valueChanged.connect(self.on_change)
+        fade_layout.addWidget(self.spin_kv_fade_len)
+        layout.addLayout(fade_layout)
+
+        # Fade Trigger
+        trigger_layout = QHBoxLayout()
+        trigger_layout.addWidget(QLabel("Fade Trigger:"))
+        self.combo_kv_fade_trig = QComboBox()
+        self.combo_kv_fade_trig.addItems(["head", "tail"])
+        self.combo_kv_fade_trig.setCurrentText(self.config.key_viewer.fade_trigger)
+        self.combo_kv_fade_trig.currentTextChanged.connect(self.on_change)
+        trigger_layout.addWidget(self.combo_kv_fade_trig)
+        trigger_layout.addStretch() 
+        layout.addLayout(trigger_layout)
 
         self.setLayout(layout)
 
@@ -293,6 +331,9 @@ class KeyViewerSettingsGroup(QGroupBox):
         self.config.key_viewer.panel_offset_y = self.spin_kv_off_y.value()
         self.config.key_viewer.show_counts = self.chk_kv_counts.isChecked()
         self.config.key_viewer.opacity = self.spin_kv_opacity.value() / 100.0
+        self.config.key_viewer.fade_position_y = self.spin_kv_fade_pos.value()
+        self.config.key_viewer.fade_length_y = self.spin_kv_fade_len.value()
+        self.config.key_viewer.fade_trigger = self.combo_kv_fade_trig.currentText()
         self.settings.save()
 
     def update_from_config(self) -> None:
@@ -304,7 +345,9 @@ class KeyViewerSettingsGroup(QGroupBox):
             self.spin_kv_off_x,
             self.spin_kv_off_y,
             self.spin_kv_opacity,
-            self.chk_kv_counts
+            self.chk_kv_counts,
+            self.spin_kv_fade_pos,
+            self.spin_kv_fade_len
         ):
             self.chk_kv_enabled.setChecked(self.config.key_viewer.enabled)
             self.spin_kv_height.setValue(self.config.key_viewer.height)
@@ -316,3 +359,6 @@ class KeyViewerSettingsGroup(QGroupBox):
             self.spin_kv_off_y.setValue(self.config.key_viewer.panel_offset_y)
             self.spin_kv_opacity.setValue(int(self.config.key_viewer.opacity * 100))
             self.chk_kv_counts.setChecked(self.config.key_viewer.show_counts)
+            self.spin_kv_fade_pos.setValue(self.config.key_viewer.fade_position_y)
+            self.spin_kv_fade_len.setValue(self.config.key_viewer.fade_length_y)
+            self.combo_kv_fade_trig.setCurrentText(self.config.key_viewer.fade_trigger)

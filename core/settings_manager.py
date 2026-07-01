@@ -59,6 +59,9 @@ class SettingsManager(QObject):
                 kv.show_counts = self.config_parser.getboolean('keyviewer', 'show_counts', fallback=True)
                 kv.height = self.config_parser.getint('keyviewer', 'height', fallback=60)
                 kv.opacity = self.config_parser.getfloat('keyviewer', 'opacity', fallback=0.2)
+                kv.fade_position_y = self.config_parser.getint('keyviewer', 'fade_position_y', fallback=800)
+                kv.fade_length_y = self.config_parser.getint('keyviewer', 'fade_length_y', fallback=200)
+                kv.fade_trigger = self.config_parser.get('keyviewer', 'fade_trigger', fallback="head")
 
             # Lanes
             if self.config_parser.has_section('lanes'):
@@ -142,6 +145,9 @@ class SettingsManager(QObject):
         self.config_parser.set('keyviewer', 'show_counts', str(kv.show_counts))
         self.config_parser.set('keyviewer', 'height', str(kv.height))
         self.config_parser.set('keyviewer', 'opacity', str(kv.opacity))
+        self.config_parser.set('keyviewer', 'fade_position_y', str(kv.fade_position_y))
+        self.config_parser.set('keyviewer', 'fade_length_y', str(kv.fade_length_y))
+        self.config_parser.set('keyviewer', 'fade_trigger', kv.fade_trigger)
 
         # Lanes
         if not self.config_parser.has_section('lanes'): self.config_parser.add_section('lanes')

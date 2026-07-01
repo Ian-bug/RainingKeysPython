@@ -15,8 +15,6 @@ class DisplayConstants:
     KEYVIEWER_OFFSET_Y_TOP: int = 50
     KEYVIEWER_OFFSET_Y_BOTTOM: int = 50
     FALLBACK_SCREEN_HEIGHT: int = 1080
-    FADE_START_Y: int = 800
-    FADE_RANGE: int = 200
 
 @dataclass
 class VisualSettings:
@@ -114,6 +112,9 @@ class KeyViewerSettings:
     show_counts: bool = True
     height: int = 60
     opacity: float = 0.2
+    fade_position_y: int = 800
+    fade_length_y: int = 200
+    fade_trigger: str = "head"
 
     def validate(self) -> bool:
         """Validate KeyViewer settings.
@@ -133,6 +134,32 @@ class KeyViewerSettings:
         if not (0.0 <= self.opacity <= 1.0):
             logger.warning(f"KeyViewer opacity {self.opacity} out of range [0.0, 1.0], clamping")
             self.opacity = max(0.0, min(1.0, self.opacity))
+            valid = False
+
+        # Attempt to get maximum screen height from all connected screens
+        try:
+            screens = QApplication.screens()
+            if screens:
+                max_screen_y = max(screen.size().height() for screen in screens)
+            else: 
+                max_screen_y = 5000 
+        except Exception:
+            max_screen_y = 5000
+        
+        # Validate fade parameters with respect to maximum screen size
+        if not (0 <= self.fade_position_y <= max_screen_y):
+            logger.warning(f"Fade position {self.fade_position_y} out of range [0, {max_screen_y}], clamping")
+            self.fade_position_y = max(0, min(max_screen_y, self.fade_position_y))
+            valid = False
+        if not (10 <= self.fade_length_y <= max_screen_y):
+            logger.warning(f"Fade length {self.fade_length_y} out of range [10, {max_screen_y}], clamping")
+            self.fade_length_y = max(0, min(max_screen_y, self.fade_length_y))
+            valid = False
+        
+        # Validate fade trigger
+        if self.fade_trigger not in ("head", "tail"):
+            logger.warning(f"Fade trigger '{self.fade_trigger}' not in ('head', 'tail'), using 'head'")
+            self.fade_trigger = "head"
             valid = False
 
         # Validate panel_position
